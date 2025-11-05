@@ -45,7 +45,7 @@ HPモデルを基づいて、{input_node}の内容はこれです：{input_conte
 """
     return prompt
 
-# 生成面向Tavily的提问
+# 生成面向Tavily的提问，区分现在(Mt)和过去(Mt-1)
 def generate_question_for_tavily(input_node: str, input_content: str, output_node: str, time: int) -> str:
     if time == 0:
         state = "過去"
