@@ -1,3 +1,30 @@
+from openai import OpenAI
+from tavily import TavilyClient
+
+tavily_client = TavilyClient("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")
+client = OpenAI()
+
+HP_model = {
+    1: "前衛的社会問題",
+    2: "人々の価値観",
+    3: "社会問題",
+    4: "技術や資源",
+    5: "日常の空間とユーザー体験",
+    6: "制度",
+    7: "メディア",
+    8: "コミュニティ化",
+    9: "文化芸術振興",
+    10: "標準化",
+    11: "コミュニケーション",
+    12: "組織化",
+    13: "意味付け",
+    14: "製品・サービス",
+    15: "習慣化",
+    16: "パラダイム",
+    17: "ビジネスエコシステム",
+    18: "アート(社会批評)"
+}
+
 SYSTEM_PROMPT = """君はサイエンスフィクションの専門家であり、「アーキオロジカル・プロトタイピング（Archaeological Prototyping, 以下HP）」モデルに基づいて社会を分析します。以下はこのモデルの紹介です。
 
 HPは、18の項目(6個の対象と12個の矢)によって構成される社会文化モデル(Sociocultural model)である。要するに、ある課題をテーマとして、社会や文化を18この要素に分割し、そのつながりを論理的に描写したモデルである。
@@ -28,22 +55,36 @@ HPは、18の項目(6個の対象と12個の矢)によって構成される社�
 """
 
 # 根据前置node，生成后续node内容复数个可选项的prompt
-def list_up_by_AI(input_node: str, input_content: str, output_node: str) -> str:
+def list_up_gpt(input_node: str, input_content: str, output_node: str) -> str:
     prompt = f"""
 HPモデルを基づいて、{input_node}の内容はこれです：{input_content}。
 この内容を分析して、{output_node}の可能な内容を５つ出力してください。
 以下のJSON形式で出力してください：
 {{"candidate": 1-5の数字番号, "content": 内容}}
 """
-    return prompt
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": prompt}
+        ]
+    )
+    return response.choices[0].message.content
 
 # 根据前置node，生成后续node内容的prompt
-def hp_node_generation(input_node: str, input_content: str, output_node: str) -> str:
+def single_gpt(input_node: str, input_content: str, output_node: str) -> str:
     prompt = f"""
 HPモデルを基づいて、{input_node}の内容はこれです：{input_content}。
 この内容を分析して、{output_node}の内容のみを出力してください。
 """
-    return prompt
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": prompt}
+        ]
+    )
+    return response.choices[0].message.content
 
 # 生成面向Tavily的提问，区分现在(Mt)和过去(Mt-1)
 def generate_question_for_tavily(input_node: str, input_content: str, output_node: str, time: int) -> str:
@@ -60,4 +101,21 @@ def generate_question_for_tavily(input_node: str, input_content: str, output_nod
 - 検索エンジンで良い結果が得られそうな質問
 質問のみを出力してください：
 """
-    return prompt
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": prompt}
+        ]
+    )
+
+    return response.choices[0].message.content
+
+def tavily_generate_answer(question: str) -> str:
+    response = tavily_client.search(
+        query=question,
+        include_answer="advanced",
+        search_depth="advanced",
+        max_results=10,
+    )
+    return response
