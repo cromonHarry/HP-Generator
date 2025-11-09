@@ -1,4 +1,5 @@
 from openai import OpenAI
+from pydantic import BaseModel
 from tavily import TavilyClient
 
 tavily_client = TavilyClient("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")
@@ -24,6 +25,9 @@ HP_model = {
     17: "ビジネスエコシステム",
     18: "アート(社会批評)"
 }
+
+class Candidate(BaseModel):
+    candidates: list[str]
 
 SYSTEM_PROMPT = """君はサイエンスフィクションの専門家であり、「アーキオロジカル・プロトタイピング（Archaeological Prototyping, 以下HP）」モデルに基づいて社会を分析します。以下はこのモデルの紹介です。
 
@@ -55,21 +59,22 @@ HPは、18の項目(6個の対象と12個の矢)によって構成される社�
 """
 
 # 根据前置node，生成后续node内容复数个可选项的prompt
-def list_up_gpt(input_node: str, input_content: str, output_node: str) -> str:
+def list_up_gpt(input_node: str, input_content: str, output_node: str) -> list:
     prompt = f"""
 HPモデルを基づいて、{input_node}の内容はこれです：{input_content}。
 この内容を分析して、{output_node}の可能な内容を５つ出力してください。
-以下のJSON形式で出力してください：
-{{"candidate": 1-5の数字番号, "content": 内容}}
+以下のlist形式で出力してください：
+["内容1", "内容2", "内容3", "内容4", "内容5"]
 """
-    response = client.chat.completions.create(
+    response = client.chat.completions.parse(
         model="gpt-4o",
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": prompt}
-        ]
+        ],
+        response_format=Candidate,
     )
-    return response.choices[0].message.content
+    return response.choices[0].message.parsed.candidates
 
 # 根据前置node，生成后续node内容的prompt
 def single_gpt(input_node: str, input_content: str, output_node: str) -> str:
@@ -118,4 +123,10 @@ def tavily_generate_answer(question: str) -> str:
         search_depth="advanced",
         max_results=10,
     )
-    return response
+    return response.get('answer', '')
+
+def user_choose_answer(answer_list: list) -> str:
+    for i in range(len(answer_list)):
+        print(f"{i+1}: {answer_list[i]}" + "\n")
+    
+    return answer_list[int(input("どの回答を選択しますか？"))-1]
