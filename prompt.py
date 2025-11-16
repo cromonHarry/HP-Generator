@@ -1,9 +1,12 @@
+# prompt.py
+import streamlit as st
 from openai import OpenAI
 from pydantic import BaseModel
 from tavily import TavilyClient
 
-tavily_client = TavilyClient("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")
-client = OpenAI()
+# 从 Streamlit 的 secrets 读取 key
+client = OpenAI(api_key=st.secrets["openai"]["api_key"])
+tavily_client = TavilyClient(api_key=st.secrets["tavily"]["api_key"])
 
 HP_model = {
     1: "前衛的社会問題",
@@ -58,8 +61,7 @@ HPは、18の項目(6個の対象と12個の矢)によって構成される社�
 12. アート(社会批評): 人々が気づかない問題を、主観的/内発的な視点で捉える人の信念。日常の空間とユーザー体験に違和感を持ち、問題を提示する役割を持つ。日常の空間とユーザー体験を前衛的社会問題に変換させる。 (日常の空間とユーザー体験 -> 前衛的社会問題)
 """
 
-# 根据前置node，生成后续node内容复数个可选项的prompt
-def list_up_gpt(input_node: str, input_content: str, output_node: str) -> list:
+def list_up_gpt(input_node: str, input_content: str, output_node: str) -> list[str]:
     prompt = f"""
 HPモデルを基づいて、{input_node}の内容はこれです：{input_content}。
 この内容を分析して、{output_node}の未来の可能な内容を５つ出力してください。想像力を示して。
@@ -77,7 +79,6 @@ HPモデルを基づいて、{input_node}の内容はこれです：{input_conte
     )
     return response.choices[0].message.parsed.candidates
 
-# 根据前置node，生成后续node内容的prompt
 def single_gpt(input_node: str, input_content: str, output_node: str) -> str:
     prompt = f"""
 HPモデルを基づいて、{input_node}の内容はこれです：{input_content}。
@@ -92,12 +93,8 @@ HPモデルを基づいて、{input_node}の内容はこれです：{input_conte
     )
     return response.choices[0].message.content
 
-# 生成面向Tavily的提问，区分现在(Mt)和过去(Mt-1)
 def generate_question_for_tavily(input_node: str, input_content: str, output_node: str, time: int) -> str:
-    if time == 0:
-        state = "過去"
-    else:
-        state = "現在"
+    state = "過去" if time == 0 else "現在"
     prompt = f"""
 {input_node}について、HPモデルの対象「{output_node}」の{state}の内容に関する自然で完整な質問文を1つ生成してください。
 {input_node}の内容はこれです：{input_content}。
@@ -114,7 +111,6 @@ def generate_question_for_tavily(input_node: str, input_content: str, output_nod
             {"role": "user", "content": prompt}
         ]
     )
-
     return response.choices[0].message.content
 
 def tavily_generate_answer(question: str) -> str:
@@ -124,10 +120,10 @@ def tavily_generate_answer(question: str) -> str:
         search_depth="advanced",
         max_results=10,
     )
-    return response.get('answer', '')
+    return response.get("answer", "")
 
-def user_choose_answer(answer_list: list) -> str:
-    for i in range(len(answer_list)):
-        print(f"{i+1}: {answer_list[i]}" + "\n")
-    
-    return answer_list[int(input("どの回答を選択しますか？"))-1]
+# 旧的 user_choose_answer 在 Streamlit 里不会再用，保留兼容即可
+def user_choose_answer(answer_list: list[str]) -> str:
+    for i, a in enumerate(answer_list, start=1):
+        print(f"{i}: {a}\n")
+    return answer_list[int(input("どの回答を選択しますか？")) - 1]
