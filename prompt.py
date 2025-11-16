@@ -62,7 +62,7 @@ HPは、18の項目(6個の対象と12個の矢)によって構成される社�
 def list_up_gpt(input_node: str, input_content: str, output_node: str) -> list:
     prompt = f"""
 HPモデルを基づいて、{input_node}の内容はこれです：{input_content}。
-この内容を分析して、{output_node}の可能な内容を５つ出力してください。
+この内容を分析して、{output_node}の未来の可能な内容を５つ出力してください。想像力を示して。
 以下のlist形式で出力してください：
 ["内容1", "内容2", "内容3", "内容4", "内容5"]
 """
@@ -72,6 +72,7 @@ HPモデルを基づいて、{input_node}の内容はこれです：{input_conte
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": prompt}
         ],
+        temperature=1.2,
         response_format=Candidate,
     )
     return response.choices[0].message.parsed.candidates
