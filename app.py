@@ -25,7 +25,7 @@ st.markdown(
 )
 
 st.markdown('<div class="main-title">HPモデル × GPT × Tavily によるSFプロット生成ツール</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-title">あなたの経験をもとに三世代のHPモデルとSF物語アウトラインを共創します。</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-title">あなたの経験をもとに三世代HPモデルとSF物語アウトラインを共創します。</div>', unsafe_allow_html=True)
 
 
 # ============================================================
@@ -38,24 +38,25 @@ def init_state():
         "mtplus1": {},
         "hp_json": None,
         "outline": None,
+        "final_confirmed": False,
 
-        # Step1
+        # Step1 状态
         "show_q2": False,
         "show_q3": False,
         "show_q4": False,
 
-        # Step2～Step4
+        # 合并后的 Step2
         "step2": False,
-        "step3": False,
-        "step4": False,
 
-        # Step3 段階
-        "s3_goal": False,
-        "s3_value": False,
-        "s3_habit": False,
-        "s3_ux": False,
+        # Step2 的阶段
+        "s2_adv": False,
+        "s2_goal": False,
+        "s2_value": False,
+        "s2_habit": False,
+        "s2_ux": False,
 
-        # Step3 用户选择
+        # 用户选择
+        "choice_adv": None,
         "choice_goal": None,
         "choice_value": None,
         "choice_habit": None,
@@ -94,7 +95,6 @@ if st.button("Q1 を送信", key="btn_q1"):
         state.show_q2 = True
         st.success("Q1 を受け取りました。続いて Q2 へ。")
 
-
 # ---------- Q2 ----------
 if state.show_q2:
     st.subheader("Q2（Mt：製品・サービス）")
@@ -110,7 +110,6 @@ if state.show_q2:
             hp_session.handle_input2(q2)
             state.show_q3 = True
             st.success("Q2 を受け取りました。続いて Q3 へ。")
-
 
 # ---------- Q3 ----------
 if state.show_q3:
@@ -128,7 +127,6 @@ if state.show_q3:
             state.show_q4 = True
             st.success("Q3 を受け取りました。続いて Q4 へ。")
 
-
 # ---------- Q4 ----------
 if state.show_q4:
     st.subheader("Q4（Mt：人々の価値観）")
@@ -137,7 +135,7 @@ if state.show_q4:
         key="input_q4", height=60
     )
 
-    if st.button("Q4 を送信して HPモデル生成開始", key="btn_q4"):
+    if st.button("Q4 を送信して Step2 開始", key="btn_q4"):
         if not q4.strip():
             st.warning("Q4に回答してください。")
         else:
@@ -146,123 +144,129 @@ if state.show_q4:
                 state.adv_candidates = hp_session.get_future_adv_candidates()
 
             state.step2 = True
-            st.success("第1フェーズ完了！ステップ2へ。")
+            state.s2_adv = True
+            st.success("次へ：未来社会の『前衛的社会問題』を選んでください。")
 
 
 # ============================================================
-#   🟩 ステップ2：Mt+1 前衛的社会問題
+#   🟩 合并后的 Step2：未来社会（Mt+1）5つの選択
 # ============================================================
 
-if state.step2 and state.adv_candidates:
-    st.header("ステップ 2：Mt+1 の前衛的社会問題を選ぶ", divider="grey")
+if state.step2:
+    st.header("ステップ 2：未来社会（Mt+1）を構成する5つの選択", divider="grey")
 
-    adv = state.adv_candidates
-    idx_adv = st.radio(
-        "未来社会の根本となる『前衛的社会問題』を選択：",
-        list(range(len(adv))), format_func=lambda i: adv[i],
-        key="adv_select"
-    )
-
-    if st.button("前衛的社会問題を確定", key="btn_adv"):
-        hp_session.set_future_adv_choice(adv[idx_adv])
-
-        with st.spinner("Mt+1 の『社会の目標』候補を生成しています…"):
-            state.mtplus1 = {
-                "goals": list_up_gpt("前衛的社会問題", adv[idx_adv], "社会の目標")
-            }
-
-        state.step3 = True
-        state.s3_goal = True
-        st.success("次へ：『社会の目標』を選んでください。")
-
-
-# ============================================================
-#   🟧 ステップ3：Mt+1 の4要素（逐步式）
-# ============================================================
-
-if state.step3:
     cands = state.mtplus1
 
-    # ---------- ① 社会の目標 ----------
-    if state.s3_goal:
-        st.header("ステップ 3：Mt+1 の4要素を段階的に選択", divider="grey")
-        st.subheader("① 社会の目標")
+    # ---------- ① 前衛的社会問題 ----------
+    if state.s2_adv:
+        st.subheader("① 前衛的社会問題")
 
+        adv = state.adv_candidates
+        idx_adv = st.radio(
+            "未来社会の前衛的社会問題を選択：",
+            list(range(len(adv))),
+            format_func=lambda i: adv[i],
+            key="radio_adv"
+        )
+
+        if st.button("① 前衛的社会問題を確定", key="btn_adv"):
+            state.choice_adv = idx_adv
+            hp_session.set_future_adv_choice(adv[idx_adv])
+
+            with st.spinner("『社会の目標』候補を生成中…"):
+                state.mtplus1["goals"] = list_up_gpt(
+                    "前衛的社会問題", adv[idx_adv], "社会の目標"
+                )
+
+            state.s2_goal = True
+            st.success("②『社会の目標』を選択してください。")
+
+    # ---------- ② 社会の目標 ----------
+    if state.s2_goal:
+        st.subheader("② 社会の目標")
+
+        goals = state.mtplus1["goals"]
         idx_goal = st.radio(
             "未来社会が目指すゴール：",
-            list(range(len(cands["goals"]))),
-            format_func=lambda i: cands["goals"][i],
-            key="goal_radio"
+            list(range(len(goals))),
+            format_func=lambda i: goals[i],
+            key="radio_goal"
         )
 
-        if st.button("① 社会の目標を確定", key="btn_goal"):
+        if st.button("② 社会の目標を確定", key="btn_goal"):
             state.choice_goal = idx_goal
+            goal_text = goals[idx_goal]
 
             with st.spinner("『人々の価値観』候補を生成中…"):
-                goal_text = cands["goals"][idx_goal]
-                cands["values"] = list_up_gpt("社会の目標", goal_text, "人々の価値観")
+                state.mtplus1["values"] = list_up_gpt(
+                    "社会の目標", goal_text, "人々の価値観"
+                )
 
-            state.s3_value = True
-            st.success("②『人々の価値観』を選択してください。")
+            state.s2_value = True
+            st.success("③『人々の価値観』を選択してください。")
 
+    # ---------- ③ 人々の価値観 ----------
+    if state.s2_value:
+        st.subheader("③ 人々の価値観")
 
-    # ---------- ② 人々の価値観 ----------
-    if state.s3_value:
-        st.subheader("② 人々の価値観")
-
+        values = state.mtplus1["values"]
         idx_value = st.radio(
-            "未来の人々が共有する価値観：",
-            list(range(len(cands["values"]))),
-            format_func=lambda i: cands["values"][i],
-            key="value_radio"
+            "未来人が共有する価値観：",
+            list(range(len(values))),
+            format_func=lambda i: values[i],
+            key="radio_value"
         )
 
-        if st.button("② 人々の価値観を確定", key="btn_value"):
+        if st.button("③ 人々の価値観を確定", key="btn_value"):
             state.choice_value = idx_value
+            value_text = values[idx_value]
 
             with st.spinner("『慣習化』および『日常の空間とUX』候補を生成中…"):
-                value_text = cands["values"][idx_value]
-                cands["habits"] = list_up_gpt("人々の価値観", value_text, "慣習化")
+                state.mtplus1["habits"] = list_up_gpt(
+                    "人々の価値観", value_text, "慣習化"
+                )
 
-                base_habit = cands["habits"][0] if cands["habits"] else ""
-                cands["ux_future"] = list_up_gpt("慣習化", base_habit, "日常の空間とユーザー体験")
+                base_habit = state.mtplus1["habits"][0] if state.mtplus1["habits"] else ""
+                state.mtplus1["ux_future"] = list_up_gpt(
+                    "慣習化", base_habit, "日常の空間とユーザー体験"
+                )
 
-            state.s3_habit = True
-            st.success("③『慣習化』を選択してください。")
+            state.s2_habit = True
+            st.success("④『慣習化』を選択してください。")
 
+    # ---------- ④ 慣習化 ----------
+    if state.s2_habit:
+        st.subheader("④ 慣習化")
 
-    # ---------- ③ 慣習化 ----------
-    if state.s3_habit:
-        st.subheader("③ 慣習化")
-
+        habits = state.mtplus1["habits"]
         idx_habit = st.radio(
-            "価値観がどのように日常へ定着するか：",
-            list(range(len(cands["habits"]))),
-            format_func=lambda i: cands["habits"][i],
-            key="habit_radio"
+            "価値観が日常へどのように定着するか：",
+            list(range(len(habits))),
+            format_func=lambda i: habits[i],
+            key="radio_habit"
         )
 
-        if st.button("③ 慣習化を確定", key="btn_habit"):
+        if st.button("④ 慣習化を確定", key="btn_habit"):
             state.choice_habit = idx_habit
-            state.s3_ux = True
-            st.success("④『日常の空間とUX』を選択してください。")
+            state.s2_ux = True
+            st.success("⑤『日常の空間とUX』を選択してください。")
 
+    # ---------- ⑤ UX ----------
+    if state.s2_ux:
+        st.subheader("⑤ 日常の空間とユーザー体験")
 
-    # ---------- ④ UX ----------
-    if state.s3_ux:
-        st.subheader("④ 日常の空間とユーザー体験")
-
+        ux_list = state.mtplus1["ux_future"]
         idx_ux = st.radio(
-            "未来の日常空間・ユーザー体験：",
-            list(range(len(cands["ux_future"]))),
-            format_func=lambda i: cands["ux_future"][i],
-            key="ux_radio"
+            "未来の日常空間とUX：",
+            list(range(len(ux_list))),
+            format_func=lambda i: ux_list[i],
+            key="radio_ux"
         )
 
         if st.button("三世代HPモデルを完成させる", key="btn_finish", type="primary"):
             state.choice_ux = idx_ux
 
-            # 🚨 修复：把 Step3 的候选同步给 hp_session
+            # 同步 Step2 结果到 generate.py
             hp_session.mtplus1_candidates = state.mtplus1
 
             with st.spinner("HPモデル（三世代）を最終生成中…"):
@@ -276,55 +280,73 @@ if state.step3:
                 state.hp_json = hp_session.to_dict()
 
             state.step4 = True
-            st.success("HPモデルが完成しました！ステップ4へ。")
+            st.success("HPモデルが完成しました！ステップ3へ進んでください。")
 
 
 # ============================================================
-#   🟪 ステップ4：SF物語アウトライン生成
+#   🟪 ステップ3：SF物語アウトライン生成（改进 / 确定）
 # ============================================================
 
 if state.step4 and state.hp_json:
-    st.header("ステップ 4：SF物語アウトライン生成", divider="grey")
+    st.header("ステップ 3：SF物語アウトライン生成", divider="grey")
 
-    if st.button("✨ アウトラインを生成", key="btn_outline"):
-        with st.spinner("GPT によるアウトライン生成中…"):
-            hp = state.hp_json
-            state.outline = generate_outline(
-                theme="未来社会",
-                scene="（ユーザー設定なし）",
-                ap_model_history=[
-                    {"ap_model": hp.get("hp_mt_0", {})},
-                    {"ap_model": hp.get("hp_mt_1", {})},
-                    {"ap_model": hp.get("hp_mt_2", {})},
-                ],
-            )
-        st.success("アウトラインが生成されました。")
+    if state.outline is None:
+        if st.button("✨ アウトラインを生成", key="btn_generate_outline"):
+            with st.spinner("GPT によるアウトライン生成中…"):
+                hp = state.hp_json
+                state.outline = generate_outline(
+                    theme="未来社会",
+                    scene="（ユーザー設定なし）",
+                    ap_model_history=[
+                        {"ap_model": hp.get("hp_mt_0", {})},
+                        {"ap_model": hp.get("hp_mt_1", {})},
+                        {"ap_model": hp.get("hp_mt_2", {})},
+                    ],
+                )
+            st.success("アウトラインが生成されました。")
 
     if state.outline:
         st.text_area("現在のアウトライン：", state.outline, height=300, key="outline_display")
 
-        mod = st.text_area("修正したい点があれば入力：", height=100, key="outline_modify")
+        col1, col2 = st.columns(2)
 
-        if st.button("🔁 修正意見を反映", key="btn_outline_fix"):
-            if not mod.strip():
-                st.warning("修正内容を入力してください。")
-            else:
-                with st.spinner("アウトライン修正中…"):
-                    state.outline = modify_outline(state.outline, mod)
-                st.success("アウトラインを更新しました。")
+        # 改进按钮
+        with col1:
+            mod = st.text_area("修正提案：", height=100, key="outline_modify")
+            if st.button("🔁 改進", key="btn_modify"):
+                if mod.strip():
+                    with st.spinner("アウトライン修正中…"):
+                        state.outline = modify_outline(state.outline, mod)
+                    st.success("アウトラインが更新されました。")
+                else:
+                    st.warning("修正内容を入力してください。")
 
-        st.download_button(
-            "⬇️ HPモデルをダウンロード（hp_output.json）",
-            json.dumps(state.hp_json, ensure_ascii=False, indent=2),
-            "hp_output.json",
-            "application/json",
-            key="download_hp"
-        )
+        # 确定按钮
+        with col2:
+            if st.button("✔️ 確定", key="btn_confirm"):
+                state.final_confirmed = True
+                st.success("確定しました！ダウンロード可能です。")
 
-        st.download_button(
-            "⬇️ アウトラインをダウンロード（outline.txt）",
-            state.outline,
-            "outline.txt",
-            "text/plain",
-            key="download_outline"
-        )
+
+# ============================================================
+#   🟫 STEP4：ダウンロード（确定后才显示）
+# ============================================================
+
+if state.final_confirmed:
+    st.header("ダウンロード", divider="grey")
+
+    st.download_button(
+        "⬇️ HPモデル（hp_output.json）",
+        json.dumps(state.hp_json, ensure_ascii=False, indent=2),
+        "hp_output.json",
+        "application/json",
+        key="download_hp"
+    )
+
+    st.download_button(
+        "⬇️ アウトライン（outline.txt）",
+        state.outline,
+        "outline.txt",
+        "text/plain",
+        key="download_outline"
+    )
