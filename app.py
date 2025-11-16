@@ -159,7 +159,8 @@ if state.step2 and state.adv_candidates:
     adv = state.adv_candidates
     idx_adv = st.radio(
         "未来社会の根本となる『前衛的社会問題』を選択：",
-        list(range(len(adv))), format_func=lambda i: adv[i], key="adv_select"
+        list(range(len(adv))), format_func=lambda i: adv[i],
+        key="adv_select"
     )
 
     if st.button("前衛的社会問題を確定", key="btn_adv"):
@@ -204,6 +205,7 @@ if state.step3:
             state.s3_value = True
             st.success("②『人々の価値観』を選択してください。")
 
+
     # ---------- ② 人々の価値観 ----------
     if state.s3_value:
         st.subheader("② 人々の価値観")
@@ -228,6 +230,7 @@ if state.step3:
             state.s3_habit = True
             st.success("③『慣習化』を選択してください。")
 
+
     # ---------- ③ 慣習化 ----------
     if state.s3_habit:
         st.subheader("③ 慣習化")
@@ -244,6 +247,7 @@ if state.step3:
             state.s3_ux = True
             st.success("④『日常の空間とUX』を選択してください。")
 
+
     # ---------- ④ UX ----------
     if state.s3_ux:
         st.subheader("④ 日常の空間とユーザー体験")
@@ -257,6 +261,9 @@ if state.step3:
 
         if st.button("三世代HPモデルを完成させる", key="btn_finish", type="primary"):
             state.choice_ux = idx_ux
+
+            # 🚨 修复：把 Step3 的候选同步给 hp_session
+            hp_session.mtplus1_candidates = state.mtplus1
 
             with st.spinner("HPモデル（三世代）を最終生成中…"):
                 hp_session.apply_mtplus1_choices(
