@@ -45,20 +45,20 @@ def init_state():
         "show_q3": False,
         "show_q4": False,
 
-        # 合并后的 Step2（Mt+1 5つの選択 全体のフラグ）
+        # Mt+1 5つの選択 全体フラグ
         "step2": False,
 
-        # HPモデル完成后，用于控制 Step3（アウトライン）显示
+        # HPモデル完成後 → アウトライン生成に進むフラグ
         "step4": False,
 
-        # Step2 内部阶段
+        # Step2 内部段階
         "s2_adv": False,
         "s2_goal": False,
         "s2_value": False,
         "s2_habit": False,
         "s2_ux": False,
 
-        # 用户选择
+        # ユーザー選択
         "choice_adv": None,
         "choice_goal": None,
         "choice_value": None,
@@ -152,7 +152,7 @@ if state.show_q4:
 
 
 # ============================================================
-#   🟩 合并后的 Step2：未来社会（Mt+1）5つの選択
+#   🟩 ステップ2：未来社会（Mt+1）5つの選択
 # ============================================================
 
 if state.step2:
@@ -160,7 +160,7 @@ if state.step2:
 
     cands = state.mtplus1
 
-    # ---------- ① 前衛的社会問題 ----------
+    # ① 前衛的社会問題
     if state.s2_adv:
         st.subheader("① 前衛的社会問題")
 
@@ -187,7 +187,7 @@ if state.step2:
                 state.s2_goal = True
                 st.success("②『社会の目標』を選択してください。")
 
-    # ---------- ② 社会の目標 ----------
+    # ② 社会の目標
     if state.s2_goal:
         st.subheader("② 社会の目標")
 
@@ -214,7 +214,7 @@ if state.step2:
                 state.s2_value = True
                 st.success("③『人々の価値観』を選択してください。")
 
-    # ---------- ③ 人々の価値観 ----------
+    # ③ 人々の価値観
     if state.s2_value:
         st.subheader("③ 人々の価値観")
 
@@ -246,7 +246,7 @@ if state.step2:
                 state.s2_habit = True
                 st.success("④『慣習化』を選択してください。")
 
-    # ---------- ④ 慣習化 ----------
+    # ④ 慣習化
     if state.s2_habit:
         st.subheader("④ 慣習化")
 
@@ -266,7 +266,7 @@ if state.step2:
                 state.s2_ux = True
                 st.success("⑤『日常の空間とUX』を選択してください。")
 
-    # ---------- ⑤ UX ----------
+    # ⑤ UX
     if state.s2_ux:
         st.subheader("⑤ 日常の空間とユーザー体験")
 
@@ -284,7 +284,7 @@ if state.step2:
             if st.button("三世代HPモデルを完成させる", key="btn_finish", type="primary"):
                 state.choice_ux = idx_ux
 
-                # 同步 Step2 结果到 generate.py
+                # generate.py に候補を渡す
                 hp_session.mtplus1_candidates = state.mtplus1
 
                 with st.spinner("HPモデル（三世代）を最終生成中…"):
@@ -302,13 +302,13 @@ if state.step2:
 
 
 # ============================================================
-#   🟪 ステップ3：SF物語アウトライン生成（改进 / 确定）
+#   🟪 ステップ3：SF物語アウトライン生成（改進 / 確定）
 # ============================================================
 
 if state.step4 and state.hp_json:
     st.header("ステップ 3：SF物語アウトライン生成", divider="grey")
 
-    # ① 初次生成
+    # 初回生成
     if state.outline is None:
         if st.button("✨ アウトラインを生成", key="btn_generate_outline"):
             with st.spinner("GPT によるアウトライン生成中…"):
@@ -322,57 +322,41 @@ if state.step4 and state.hp_json:
                         {"ap_model": hp.get("hp_mt_2", {})},
                     ],
                 )
-                # 写入显示状态
-                st.session_state["outline_display"] = state.outline
             st.success("アウトラインが生成されました。")
             st.rerun()
 
-    # ② 已有大纲时
+    # すでにアウトラインがあるとき
     if state.outline:
 
-        # 保证 outline_display 每次等于最新内容
-        if "outline_display" not in st.session_state:
-            st.session_state["outline_display"] = state.outline
-        elif st.session_state["outline_display"] != state.outline:
-            st.session_state["outline_display"] = state.outline
-
-        # 这里使用 key="outline_display" 并允许用户编辑或禁用
-        st.text_area(
-            "現在のアウトライン：",
-            key="outline_display",
-            height=300,
-        )
+        st.markdown("**現在のアウトライン：**")
+        # 用 markdown 代码块展示，避免 widget state 干扰
+        st.markdown(f"```text\n{state.outline}\n```")
 
         col1, col2 = st.columns(2)
 
-        # 改进按钮
+        # 改進
         with col1:
             mod = st.text_area("修正提案：", height=100, key="outline_modify")
-
             if st.button("🔁 改進", key="btn_modify"):
                 if mod.strip():
                     with st.spinner("アウトライン修正中…"):
                         new_outline = modify_outline(state.outline, mod)
                         state.outline = new_outline
-                        st.session_state["outline_display"] = new_outline
                     st.success("アウトラインが更新されました。")
-
-                    # 🚀 强制刷新页面，让 textarea 立刻显示最新内容
+                    # 強制再実行 → 上の markdown が新しい内容で再描画される
                     st.rerun()
-
                 else:
                     st.warning("修正内容を入力してください。")
 
-        # 确定按钮
+        # 確定
         with col2:
             if st.button("✔️ 確定", key="btn_confirm"):
                 state.final_confirmed = True
                 st.success("確定しました！下にダウンロードボタンが表示されます。")
 
 
-
 # ============================================================
-#   🟫 STEP4：ダウンロード（确定后才显示）
+#   🟫 STEP4：ダウンロード（確定後に表示）
 # ============================================================
 
 if state.final_confirmed and state.hp_json and state.outline:
