@@ -322,19 +322,16 @@ if state.step4 and state.hp_json:
                         {"ap_model": hp.get("hp_mt_2", {})},
                     ],
                 )
-                # 同步显示用控件的内容
-                st.session_state["outline_display"] = state.outline
             st.success("アウトラインが生成されました。")
 
     # ② 已有大纲时的显示和改写
     if state.outline:
-        # 每次 rerun 时，保证展示内容与 state.outline 同步
-        st.session_state["outline_display"] = state.outline
-
+        # 只读展示当前大纲（不设置 key，避免和 session_state 冲突）
         st.text_area(
             "現在のアウトライン：",
-            key="outline_display",
+            value=state.outline,
             height=300,
+            disabled=True,
         )
 
         col1, col2 = st.columns(2)
@@ -347,8 +344,6 @@ if state.step4 and state.hp_json:
                     with st.spinner("アウトライン修正中…"):
                         new_outline = modify_outline(state.outline, mod)
                         state.outline = new_outline
-                        # 同步显示内容
-                        st.session_state["outline_display"] = state.outline
                     st.success("アウトラインが更新されました。")
                 else:
                     st.warning("修正内容を入力してください。")
