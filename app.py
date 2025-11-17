@@ -40,7 +40,7 @@ def init_state():
         "outline": None,
         "final_confirmed": False,
 
-        # Step1 状态
+        # Step1 状態
         "show_q2": False,
         "show_q3": False,
         "show_q4": False,
@@ -308,6 +308,7 @@ if state.step2:
 if state.step4 and state.hp_json:
     st.header("ステップ 3：SF物語アウトライン生成", divider="grey")
 
+    # ① 初次生成
     if state.outline is None:
         if st.button("✨ アウトラインを生成", key="btn_generate_outline"):
             with st.spinner("GPT によるアウトライン生成中…"):
@@ -321,10 +322,20 @@ if state.step4 and state.hp_json:
                         {"ap_model": hp.get("hp_mt_2", {})},
                     ],
                 )
+                # 同步显示用控件的内容
+                st.session_state["outline_display"] = state.outline
             st.success("アウトラインが生成されました。")
 
+    # ② 已有大纲时的显示和改写
     if state.outline:
-        st.text_area("現在のアウトライン：", state.outline, height=300, key="outline_display")
+        # 每次 rerun 时，保证展示内容与 state.outline 同步
+        st.session_state["outline_display"] = state.outline
+
+        st.text_area(
+            "現在のアウトライン：",
+            key="outline_display",
+            height=300,
+        )
 
         col1, col2 = st.columns(2)
 
@@ -334,7 +345,10 @@ if state.step4 and state.hp_json:
             if st.button("🔁 改進", key="btn_modify"):
                 if mod.strip():
                     with st.spinner("アウトライン修正中…"):
-                        state.outline = modify_outline(state.outline, mod)
+                        new_outline = modify_outline(state.outline, mod)
+                        state.outline = new_outline
+                        # 同步显示内容
+                        st.session_state["outline_display"] = state.outline
                     st.success("アウトラインが更新されました。")
                 else:
                     st.warning("修正内容を入力してください。")
