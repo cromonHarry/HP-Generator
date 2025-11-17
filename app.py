@@ -308,7 +308,9 @@ if state.step2:
 if state.step4 and state.hp_json:
     st.header("ステップ 3：SF物語アウトライン生成", divider="grey")
 
-    # 初回生成
+    # -------------------------------
+    # ① 初次生成アウトライン
+    # -------------------------------
     if state.outline is None:
         if st.button("✨ アウトラインを生成", key="btn_generate_outline"):
             with st.spinner("GPT によるアウトライン生成中…"):
@@ -325,41 +327,53 @@ if state.step4 and state.hp_json:
             st.success("アウトラインが生成されました。")
             st.rerun()
 
-    # すでにアウトラインがあるとき
+    # -------------------------------
+    # ② アウトライン表示 & 改進
+    # -------------------------------
     if state.outline:
 
+        # ⭐ 动态容器（text_area を毎回再描画するため）
         st.subheader("現在のアウトライン：")
+        outline_container = st.empty()
 
-        # 使用 text_area 自动换行，不再左右滑动
-        st.text_area(
+        # 上下换行、只读显示最新内容
+        outline_container.text_area(
             label="",
             value=state.outline,
             height=300,
-            disabled=True,
-            key="outline_display_area"
+            disabled=True
         )
 
+        # 左右按钮
         col1, col2 = st.columns(2)
 
-        # 改進
+        # -------------------------------
+        # 🟦 改進
+        # -------------------------------
         with col1:
             mod = st.text_area("修正提案：", height=100, key="outline_modify")
+
             if st.button("🔁 改進", key="btn_modify"):
                 if mod.strip():
                     with st.spinner("アウトライン修正中…"):
                         new_outline = modify_outline(state.outline, mod)
                         state.outline = new_outline
+
                     st.success("アウトラインが更新されました。")
+
+                    # ⭐ 强制刷新 → 新内容立即显示在上方
                     st.rerun()
+
                 else:
                     st.warning("修正内容を入力してください。")
 
-        # 確定
+        # -------------------------------
+        # 🟩 確定
+        # -------------------------------
         with col2:
             if st.button("✔️ 確定", key="btn_confirm"):
                 state.final_confirmed = True
                 st.success("確定しました！下にダウンロードボタンが表示されます。")
-
 
 
 # ============================================================
