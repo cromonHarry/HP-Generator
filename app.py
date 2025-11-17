@@ -328,9 +328,16 @@ if state.step4 and state.hp_json:
     # すでにアウトラインがあるとき
     if state.outline:
 
-        st.markdown("**現在のアウトライン：**")
-        # 用 markdown 代码块展示，避免 widget state 干扰
-        st.markdown(f"```text\n{state.outline}\n```")
+        st.subheader("現在のアウトライン：")
+
+        # 使用 text_area 自动换行，不再左右滑动
+        st.text_area(
+            label="",
+            value=state.outline,
+            height=300,
+            disabled=True,
+            key="outline_display_area"
+        )
 
         col1, col2 = st.columns(2)
 
@@ -343,7 +350,6 @@ if state.step4 and state.hp_json:
                         new_outline = modify_outline(state.outline, mod)
                         state.outline = new_outline
                     st.success("アウトラインが更新されました。")
-                    # 強制再実行 → 上の markdown が新しい内容で再描画される
                     st.rerun()
                 else:
                     st.warning("修正内容を入力してください。")
@@ -353,6 +359,7 @@ if state.step4 and state.hp_json:
             if st.button("✔️ 確定", key="btn_confirm"):
                 state.final_confirmed = True
                 st.success("確定しました！下にダウンロードボタンが表示されます。")
+
 
 
 # ============================================================
