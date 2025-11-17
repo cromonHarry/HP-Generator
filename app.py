@@ -322,16 +322,25 @@ if state.step4 and state.hp_json:
                         {"ap_model": hp.get("hp_mt_2", {})},
                     ],
                 )
+                # 写入显示状态
+                st.session_state["outline_display"] = state.outline
             st.success("アウトラインが生成されました。")
+            st.rerun()
 
-    # ② 已有大纲时的显示和改写
+    # ② 已有大纲时
     if state.outline:
-        # 只读展示当前大纲（不设置 key，避免和 session_state 冲突）
+
+        # 保证 outline_display 每次等于最新内容
+        if "outline_display" not in st.session_state:
+            st.session_state["outline_display"] = state.outline
+        elif st.session_state["outline_display"] != state.outline:
+            st.session_state["outline_display"] = state.outline
+
+        # 这里使用 key="outline_display" 并允许用户编辑或禁用
         st.text_area(
             "現在のアウトライン：",
-            value=state.outline,
+            key="outline_display",
             height=300,
-            disabled=True,
         )
 
         col1, col2 = st.columns(2)
@@ -339,12 +348,18 @@ if state.step4 and state.hp_json:
         # 改进按钮
         with col1:
             mod = st.text_area("修正提案：", height=100, key="outline_modify")
+
             if st.button("🔁 改進", key="btn_modify"):
                 if mod.strip():
                     with st.spinner("アウトライン修正中…"):
                         new_outline = modify_outline(state.outline, mod)
                         state.outline = new_outline
+                        st.session_state["outline_display"] = new_outline
                     st.success("アウトラインが更新されました。")
+
+                    # 🚀 强制刷新页面，让 textarea 立刻显示最新内容
+                    st.rerun()
+
                 else:
                     st.warning("修正内容を入力してください。")
 
@@ -353,6 +368,7 @@ if state.step4 and state.hp_json:
             if st.button("✔️ 確定", key="btn_confirm"):
                 state.final_confirmed = True
                 st.success("確定しました！下にダウンロードボタンが表示されます。")
+
 
 
 # ============================================================
