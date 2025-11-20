@@ -85,7 +85,7 @@ st.header("ステップ 1：あなたの経験についての4つの質問", div
 # ---------- Q1 ----------
 st.subheader("Q1（Mt：日常の空間とユーザー体験）")
 q1 = st.text_area(
-    "最近、『自分は他の人と違うかもしれない』と感じた行動は？",
+    "最近あなた自身がした行動の中で、誇りに思える、あるいは独創性があると感じるものを思い出してください。",
     key="input_q1",
     height=60
 )
@@ -102,7 +102,7 @@ if st.button("Q1 を送信", key="btn_q1"):
 if state.show_q2:
     st.subheader("Q2（Mt：製品・サービス）")
     q2 = st.text_area(
-        "その行動を実現するために使用している製品・サービスは？",
+        "その行動を実現するために使用している製品やサービスは？",
         key="input_q2", height=60
     )
 
@@ -118,7 +118,7 @@ if state.show_q2:
 if state.show_q3:
     st.subheader("Q3（Mt：意味付け）")
     q3 = st.text_area(
-        "なぜ、その製品・サービスを使っていると思いますか？",
+        "なぜ、その製品やサービスを使っていると思いますか？",
         key="input_q3", height=60
     )
 
@@ -169,7 +169,7 @@ if state.step2:
             st.error("前衛的社会問題の候補が生成できませんでした。もう一度最初から試してください。")
         else:
             idx_adv = st.radio(
-                "未来社会の前衛的社会問題を選択：",
+                "以下の選択肢の中から、最も共感する前衛的社会問題を一つ選んでください。",
                 list(range(len(adv))),
                 format_func=lambda i: adv[i],
                 key="radio_adv"
@@ -196,7 +196,7 @@ if state.step2:
             st.error("『社会の目標』候補が存在しません。")
         else:
             idx_goal = st.radio(
-                "未来社会が目指すゴール：",
+                "以下の選択肢の中から、最も共感する社会の目標を一つ選んでください。",
                 list(range(len(goals))),
                 format_func=lambda i: goals[i],
                 key="radio_goal"
@@ -223,7 +223,7 @@ if state.step2:
             st.error("『人々の価値観』候補が存在しません。")
         else:
             idx_value = st.radio(
-                "未来人が共有する価値観：",
+                "以下の選択肢の中から、最も共感する未来人が共有する価値観を一つ選んでください。",
                 list(range(len(values))),
                 format_func=lambda i: values[i],
                 key="radio_value"
@@ -255,7 +255,7 @@ if state.step2:
             st.error("『慣習化』候補が存在しません。")
         else:
             idx_habit = st.radio(
-                "価値観が日常へどのように定着するか：",
+                "以下の選択肢の中から、最も共感する未来人が共有する習慣を一つ選んでください。",
                 list(range(len(habits))),
                 format_func=lambda i: habits[i],
                 key="radio_habit"
@@ -275,7 +275,7 @@ if state.step2:
             st.error("『日常の空間とUX』候補が存在しません。")
         else:
             idx_ux = st.radio(
-                "未来の日常空間とUX：",
+                "以下の選択肢の中から、最も共感する未来人が共有するユーザー体験を一つ選んでください。",
                 list(range(len(ux_list))),
                 format_func=lambda i: ux_list[i],
                 key="radio_ux"
