@@ -12,18 +12,19 @@ def build_ap_model_history_from_dict(data: dict) -> list[dict]:
         {"ap_model": data.get("hp_mt_2", {})},
     ]
 
-def generate_outline(theme: str, scene: str, ap_model_history: list[dict]) -> str:
+def generate_outline(ap_model_history: list[dict]) -> str:
     prompt = f"""
-あなたはプロのSF作家です。以下の情報に基づき、テーマ「{theme}」の短編SF小説のあらすじを作成してください。
-## 物語の舞台設定:
-{scene}
-## 物語の序盤（Sカーブ ステージ2）:
-{json.dumps(ap_model_history[1]['ap_model'], ensure_ascii=False, indent=2)}
-## 物語の結末（Sカーブ ステージ3）:
-{json.dumps(ap_model_history[2]['ap_model'], ensure_ascii=False, indent=2)}
-## 物語の背景（Sカーブ ステージ1）:
+あなたはプロのSF作家です。以下の情報に基づき、想像力がある短編SF小説のストーリー概要を作成してください。
+## 物語の背景（ステージ1とステージ2）:
+# ステージ1:
 {json.dumps(ap_model_history[0]['ap_model'], ensure_ascii=False, indent=2)}
-上記の情報に基づき、指定された舞台設定で展開される主要なプロット、登場人物、中心的な対立を含む、革新的で魅力的なSF小説のスタイルに従った物語のあらすじを作成してください。
+# ステージ2:
+{json.dumps(ap_model_history[1]['ap_model'], ensure_ascii=False, indent=2)}
+
+## 物語の最も重要な情報（ステージ3）:
+{json.dumps(ap_model_history[2]['ap_model'], ensure_ascii=False, indent=2)}
+
+上記の情報に基づき、指定された舞台設定で展開される主要なプロット、登場人物、中心的な対立を含む、革新的で魅力的なSF小説のスタイルに従った物語のストーリー概要を作成してください。
 """
     response = client.chat.completions.create(
         model="gpt-4o",

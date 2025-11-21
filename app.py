@@ -26,7 +26,7 @@ st.markdown(
 )
 
 st.markdown('<div class="main-title">HPモデル × GPT × Tavily によるSFプロット生成ツール</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-title">あなたの経験をもとに三世代HPモデルとSF物語アウトラインを共創します。</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-title">あなたの経験をもとに三世代HPモデルとSF物語ストーリー概要を共創します。</div>', unsafe_allow_html=True)
 
 
 # ============================================================
@@ -317,25 +317,23 @@ if state.step4 and state.hp_json:
     st.write("---") # 分隔线
     # -------------------------
 
-    st.subheader("SF物語アウトライン生成") # 修改标题层级以适应结构
+    st.subheader("SF物語ストーリー概要生成") # 修改标题层级以适应结构
 
     # -------------------------------
     # ① 初次生成アウトライン
     # -------------------------------
     if state.outline is None:
-        if st.button("✨ アウトラインを生成", key="btn_generate_outline"):
-            with st.spinner("GPT によるアウトライン生成中…"):
+        if st.button("✨ ストーリー概要を生成", key="btn_generate_outline"):
+            with st.spinner("GPT によるストーリー概要生成中…"):
                 hp = state.hp_json
                 state.outline = generate_outline(
-                    theme="未来社会",
-                    scene="（ユーザー設定なし）",
                     ap_model_history=[
                         {"ap_model": hp.get("hp_mt_0", {})},
                         {"ap_model": hp.get("hp_mt_1", {})},
                         {"ap_model": hp.get("hp_mt_2", {})},
                     ],
                 )
-            st.success("アウトラインが生成されました。")
+            st.success("ストーリー概要が生成されました。")
             st.rerun()
 
     # -------------------------------
@@ -344,7 +342,7 @@ if state.step4 and state.hp_json:
     if state.outline:
 
         # ⭐ 动态容器（text_area を毎回再描画するため）
-        st.subheader("現在のアウトライン：")
+        st.subheader("現在のストーリー概要：")
         outline_container = st.empty()
 
         # 上下换行、只读显示最新内容
@@ -366,11 +364,11 @@ if state.step4 and state.hp_json:
 
             if st.button("🔁 改進", key="btn_modify"):
                 if mod.strip():
-                    with st.spinner("アウトライン修正中…"):
+                    with st.spinner("ストーリー概要修正中…"):
                         new_outline = modify_outline(state.outline, mod)
                         state.outline = new_outline
 
-                    st.success("アウトラインが更新されました。")
+                    st.success("ストーリー概要が更新されました。")
 
                     # ⭐ 强制刷新 → 新内容立即显示在上方
                     st.rerun()
@@ -403,7 +401,7 @@ if state.final_confirmed and state.hp_json and state.outline:
     )
 
     st.download_button(
-        "⬇️ アウトライン（outline.txt）",
+        "⬇️ ストーリー概要（outline.txt）",
         state.outline,
         "outline.txt",
         "text/plain",
