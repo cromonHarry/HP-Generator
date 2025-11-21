@@ -4,33 +4,37 @@ import json
 import streamlit.components.v1 as components
 from prompt import HP_model
 
-# HPモデルのトポロジー定義（PDF資料に基づく厳密な定義）
+# HPモデルのトポロジー定義（ユーザー指摘に基づく修正版）
 # Key: Arrow ID, Value: (Source Node ID, Target Node ID, Is_Inter_Generation)
+# Is_Inter_Generation=True の場合は点線で次世代（Mt+1）に接続する
 HP_TOPOLOGY = {
     # === 同世代 (Intra-generation / 実線) ===
+    # [ユーザー修正] パラダイム: 技術・資源 -> 前衛的社会問題
+    16: (4, 1, False),
+    # [ユーザー修正] 文化芸術振興: 前衛的社会問題 -> 人々の価値観
+    9:  (1, 2, False),
+    # [ユーザー修正] コミュニケーション: 社会問題 -> 人々の価値観
+    11: (3, 2, False),
+    
+    # 既存の同世代接続
     7:  (6, 3, False),  # メディア: 制度 -> 社会問題
     8:  (1, 3, False),  # コミュニティ化: 前衛的社会問題 -> 社会問題
     12: (3, 4, False),  # 組織化: 社会問題 -> 技術・資源
     14: (4, 5, False),  # 製品・サービス: 技術・資源 -> UX
     17: (5, 6, False),  # ビジネスエコシステム: UX -> 制度
     18: (5, 1, False),  # アート: UX -> 前衛的社会問題
-
+    
     # === 次世代 (Inter-generation / 点線 / 時間的差異あり) ===
-    9:  (1, 2, True),   # 文化芸術振興: 前衛的社会問題 -> (次)人々の価値観
-    10: (6, 4, True),   # 標準化: 制度 -> (次)技術・資源
-    11: (3, 2, True),   # コミュニケーション: 社会問題 -> (次)人々の価値観
-    13: (2, 5, True),   # 意味付け: 人々の価値観 -> (次)UX
-    15: (2, 6, True),   # 習慣化: 人々の価値観 -> (次)制度
-    16: (4, 1, True)    # パラダイム: 技術・資源 -> (次)前衛的社会問題
+    # 主に「価値観」や「制度」が次の時代を作る駆動力となる矢印
+    # ⚠️ 注意: 以下の行がエラーになる場合、上の行(18番)の末尾にカンマがあるか確認してください
+    10: (6, 4, True),   # 標準化: (旧)制度 -> (新)技術・資源
+    13: (2, 5, True),   # 意味付け: (旧)人々の価値観 -> (新)UX
+    15: (2, 6, True),   # 習慣化: (旧)人々の価値観 -> (新)制度
 }
 
 NODE_IDS = [1, 2, 3, 4, 5, 6]
 
 def transform_data_for_vis(hp_json: dict) -> list:
-    """
-    hp_jsonを可視化用に変換。トポロジー定義に基づき、
-    同世代・次世代のフラグ(is_inter)を付与する。
-    """
     stages = [
         {"key": "hp_mt_0", "stage_idx": 0}, # Mt-1: 過去
         {"key": "hp_mt_1", "stage_idx": 1}, # Mt: 現在
@@ -179,12 +183,7 @@ def render_hp_visualization(hp_json: dict):
             const xMidRight = 290;
             const xRight = 370;
 
-            // === レイアウト定義 ===
-            
             // 偶数世代 (0=Mt-1, 2=Mt+1) : 正三角形（ピラミッド）
-            // 上: 制度
-            // 中: UX, 社会問題
-            // 下: 技術, 前衛, 価値観
             if (stageIdx % 2 === 0) {{
                 if (nodeType === '制度')                      return {{ x: offsetX + xCenter, y: yTop }};
                 if (nodeType === '日常の空間とユーザー体験')  return {{ x: offsetX + xMidLeft, y: yMid }};
@@ -194,9 +193,6 @@ def render_hp_visualization(hp_json: dict):
                 if (nodeType === '人々の価値観')              return {{ x: offsetX + xRight, y: yBot }};
             }} 
             // 奇数世代 (1=Mt: 現在) : 逆三角形（逆ピラミッド）
-            // 上: 技術, 前衛, 価値観
-            // 中: UX, 社会問題
-            // 下: 制度
             else {{
                 if (nodeType === '技術や資源')              return {{ x: offsetX + xLeft,  y: yTop }};
                 if (nodeType === '前衛的社会問題')            return {{ x: offsetX + xCenter, y: yTop }};
@@ -205,7 +201,6 @@ def render_hp_visualization(hp_json: dict):
                 if (nodeType === '社会問題')                  return {{ x: offsetX + xMidRight, y: yMid }};
                 if (nodeType === '制度')                      return {{ x: offsetX + xCenter, y: yBot }};
             }}
-            
             return null;
         }}
 
@@ -277,7 +272,7 @@ def render_hp_visualization(hp_json: dict):
             const dist = Math.sqrt(dx*dx + dy*dy);
             const angle = Math.atan2(dy, dx) * 180 / Math.PI;
             
-            const pad = 55; // node radius
+            const pad = 55; 
             const len = Math.max(0, dist - pad * 2);
             
             const arrow = document.createElement('div');
