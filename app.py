@@ -5,6 +5,7 @@ import streamlit as st
 from generate import HPGenerationSession
 from outline import generate_outline, modify_outline
 from prompt import list_up_gpt
+from visualization import render_hp_visualization
 
 
 # ===== ページ設定 =====
@@ -306,7 +307,17 @@ if state.step2:
 # ============================================================
 
 if state.step4 and state.hp_json:
-    st.header("ステップ 3：SF物語アウトライン生成", divider="grey")
+    st.header("ステップ 3：HPモデルの可視化 & 物語生成", divider="grey")
+    
+    st.info("完成したHPモデル（三世代）の構造図です。ノードや矢印にマウスを乗せると詳細が表示されます。")
+    
+    # 这里的 state.hp_json 包含 hp_mt_0, hp_mt_1, hp_mt_2
+    render_hp_visualization(state.hp_json)
+    
+    st.write("---") # 分隔线
+    # -------------------------
+
+    st.subheader("SF物語アウトライン生成") # 修改标题层级以适应结构
 
     # -------------------------------
     # ① 初次生成アウトライン
