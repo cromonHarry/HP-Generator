@@ -317,4 +317,4 @@ def render_hp_visualization(hp_json: dict):
 </body>
 </html>
     '''
-    components.v1.html(html_content, height=630, scrolling=True)
+    components.html(html_content, height=630, scrolling=True)
