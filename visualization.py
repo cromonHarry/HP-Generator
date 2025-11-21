@@ -6,7 +6,6 @@ from prompt import HP_model
 
 # HPモデルのトポロジー定義（PDF資料に基づく厳密な定義）
 # Key: Arrow ID, Value: (Source Node ID, Target Node ID, Is_Inter_Generation)
-# Is_Inter_Generation=True の場合は点線で次世代（Mt+1）に接続する
 HP_TOPOLOGY = {
     # === 同世代 (Intra-generation / 実線) ===
     7:  (6, 3, False),  # メディア: 制度 -> 社会問題
@@ -66,7 +65,7 @@ def transform_data_for_vis(hp_json: dict) -> list:
                     "definition": raw_data[arrow_name],
                     "source": src_name,
                     "target": tgt_name,
-                    "is_inter": is_inter  # JS側で次世代への接続を判断するために使用
+                    "is_inter": is_inter
                 })
 
         vis_data.append({
@@ -95,8 +94,7 @@ def render_hp_visualization(hp_json: dict):
     <style>
         body {{ font-family: "Helvetica Neue", Arial, sans-serif; background-color: transparent; margin: 0; padding: 0; }}
         .vis-wrapper {{ overflow-x: auto; border: 1px solid #eee; border-radius: 8px; background: white; padding-bottom: 30px; }}
-        /* コンテナ幅を少し広げて、各世代間の矢印を見やすくする */
-        .visualization {{ position: relative; width: 1500px; height: 650px; background: #fff; margin: 0 auto; }}
+        .visualization {{ position: relative; width: 1450px; height: 680px; background: #fff; margin: 0 auto; }}
         
         /* Node Styles */
         .node {{
@@ -110,13 +108,13 @@ def render_hp_visualization(hp_json: dict):
         }}
         .node:hover {{ transform: scale(1.1); z-index: 100; box-shadow: 0 6px 16px rgba(0,0,0,0.2); }}
         
-        /* Node Colors (Pastel) */
-        .node-前衛的社会問題 {{ background: #ffb3b3; border-color: #ff8080; }} /* Red-ish */
-        .node-人々の価値観 {{ background: #ffdfba; border-color: #ffb366; }} /* Orange-ish */
-        .node-社会問題 {{ background: #ffffba; border-color: #e6e600; }} /* Yellow-ish */
-        .node-技術や資源 {{ background: #baffc9; border-color: #00cc44; }} /* Green-ish */
-        .node-日常の空間とユーザー体験 {{ background: #bae1ff; border-color: #3399ff; }} /* Blue-ish */
-        .node-制度 {{ background: #e1baff; border-color: #9933ff; }} /* Purple-ish */
+        /* Node Colors */
+        .node-前衛的社会問題 {{ background: #ffb3b3; border-color: #ff8080; }}
+        .node-人々の価値観 {{ background: #ffdfba; border-color: #ffb366; }}
+        .node-社会問題 {{ background: #ffffba; border-color: #e6e600; }}
+        .node-技術や資源 {{ background: #baffc9; border-color: #00cc44; }}
+        .node-日常の空間とユーザー体験 {{ background: #bae1ff; border-color: #3399ff; }}
+        .node-制度 {{ background: #e1baff; border-color: #9933ff; }}
         
         /* Arrow Styles */
         .arrow {{ position: absolute; height: 2px; background: #999; transform-origin: left center; z-index: 1; pointer-events: none; }}
@@ -124,7 +122,6 @@ def render_hp_visualization(hp_json: dict):
             content: ''; position: absolute; right: -8px; top: -4px;
             border-left: 8px solid #999; border-top: 4px solid transparent; border-bottom: 4px solid transparent;
         }}
-        /* Inter-generation arrows are dashed (Dotted in PDF terminology) */
         .dotted-arrow {{ border-top: 2px dashed #999; background: transparent; height: 0px; }}
         .dotted-arrow::after {{ border-left-color: #999; }}
         
@@ -164,90 +161,90 @@ def render_hp_visualization(hp_json: dict):
         let allNodes = {{}};
         const data = {json_str};
 
-        // === 座標計算ロジック ===
-        // 3世代を左から右へ配置
+        // === 座標計算ロジック (正三角・逆三角レイアウト) ===
         function getNodePosition(stageIdx, nodeType) {{
-            const stageWidth = 480; // 世代間の幅
-            const startX = 50;
+            const stageWidth = 460; // 世代間の幅
+            const startX = 40;
             const offsetX = startX + (stageIdx * stageWidth);
             
-            // Y座標 (Top, Middle, Bottom)
-            const yTop = 50;
-            const yMid = 270;
-            const yBot = 490;
+            // Y座標
+            const yTop = 60;
+            const yMid = 260;
+            const yBot = 480;
 
-            // 各世代内のX相対座標
-            // PDFの図のダイヤモンド型/六角形配置を意識
-            const xLeft = 0;
-            const xMidL = 100;
-            const xCenter = 200;
-            const xMidR = 300;
-            const xRight = 400;
+            // 世代内のX相対座標
+            const xLeft = 20;
+            const xMidLeft = 120;
+            const xCenter = 205;
+            const xMidRight = 290;
+            const xRight = 370;
 
             // === レイアウト定義 ===
-            // PDFの図を見ると、技術(左下)・UX(左上)・社会問題(右上)・制度(右下)のような配置が多いが
-            // 世代間の接続を見やすくするため、標準的な六角形配置を採用します。
             
-            // 偶数世代 (Mt-1, Mt+1)
+            // 偶数世代 (0=Mt-1, 2=Mt+1) : 正三角形（ピラミッド）
+            // 上: 制度
+            // 中: UX, 社会問題
+            // 下: 技術, 前衛, 価値観
             if (stageIdx % 2 === 0) {{
-                if (nodeType === '日常の空間とユーザー体験') return {{ x: offsetX + xLeft,   y: yTop }}; // 左上
-                if (nodeType === '技術や資源')              return {{ x: offsetX + xLeft,   y: yBot }}; // 左下
-                if (nodeType === '前衛的社会問題')          return {{ x: offsetX + xCenter, y: yMid }}; // 中央 (または左中)
-                if (nodeType === '制度')                    return {{ x: offsetX + xRight,  y: yBot }}; // 右下
-                if (nodeType === '社会問題')                return {{ x: offsetX + xRight,  y: yTop }}; // 右上
-                if (nodeType === '人々の価値観')            return {{ x: offsetX + xCenter + 160, y: yMid }}; // 最右
-                
-                // 調整: 前衛的社会問題は少し左寄りに
-                if (nodeType === '前衛的社会問題')          return {{ x: offsetX + xMidL, y: yMid }};
+                if (nodeType === '制度')                      return {{ x: offsetX + xCenter, y: yTop }};
+                if (nodeType === '日常の空間とユーザー体験')  return {{ x: offsetX + xMidLeft, y: yMid }};
+                if (nodeType === '社会問題')                  return {{ x: offsetX + xMidRight, y: yMid }};
+                if (nodeType === '技術や資源')              return {{ x: offsetX + xLeft,  y: yBot }};
+                if (nodeType === '前衛的社会問題')            return {{ x: offsetX + xCenter, y: yBot }};
+                if (nodeType === '人々の価値観')              return {{ x: offsetX + xRight, y: yBot }};
             }} 
-            // 奇数世代 (Mt: 現在) - 少しずらして重なり防止 & リズム感
+            // 奇数世代 (1=Mt: 現在) : 逆三角形（逆ピラミッド）
+            // 上: 技術, 前衛, 価値観
+            // 中: UX, 社会問題
+            // 下: 制度
             else {{
-                if (nodeType === '日常の空間とユーザー体験') return {{ x: offsetX + xLeft,   y: yTop }};
-                if (nodeType === '技術や資源')              return {{ x: offsetX + xLeft,   y: yBot }};
-                if (nodeType === '前衛的社会問題')          return {{ x: offsetX + xMidL,   y: yMid }};
-                if (nodeType === '社会問題')                return {{ x: offsetX + xRight,  y: yTop }};
-                if (nodeType === '制度')                    return {{ x: offsetX + xRight,  y: yBot }};
-                if (nodeType === '人々の価値観')            return {{ x: offsetX + xCenter + 160, y: yMid }};
+                if (nodeType === '技術や資源')              return {{ x: offsetX + xLeft,  y: yTop }};
+                if (nodeType === '前衛的社会問題')            return {{ x: offsetX + xCenter, y: yTop }};
+                if (nodeType === '人々の価値観')              return {{ x: offsetX + xRight, y: yTop }};
+                if (nodeType === '日常の空間とユーザー体験')  return {{ x: offsetX + xMidLeft, y: yMid }};
+                if (nodeType === '社会問題')                  return {{ x: offsetX + xMidRight, y: yMid }};
+                if (nodeType === '制度')                      return {{ x: offsetX + xCenter, y: yBot }};
             }}
             
-            // デフォルト配置 (念のため)
-            return {{ x: offsetX, y: yMid }};
+            return null;
         }}
 
         function render() {{
             container.innerHTML = '';
             allNodes = {{}};
             
-            // 1. ステージラベル
+            // ステージラベル
             ['Mt-1: 過去', 'Mt: 現在', 'Mt+1: 未来'].forEach((label, i) => {{
                 const div = document.createElement('div');
                 div.className = 'stage-label';
                 div.innerText = label;
-                div.style.left = (i * 480 + 150) + 'px';
+                div.style.left = (i * 460 + 170) + 'px';
                 container.appendChild(div);
             }});
 
-            // 2. ノード描画
+            // ノード描画
             data.forEach(d => {{
                 d.ap_model.nodes.forEach(n => {{
                     const pos = getNodePosition(d.stage, n.type);
-                    const el = document.createElement('div');
-                    el.className = `node node-${{n.type}}`;
-                    el.style.left = pos.x + 'px';
-                    el.style.top = pos.y + 'px';
-                    el.textContent = n.type;
-                    el.dataset.text = n.definition || '';
-                    
-                    el.onmouseenter = (e) => showTip(e, n.type, el.dataset.text);
-                    el.onmousemove = moveTip;
-                    el.onmouseleave = hideTip;
-                    
-                    container.appendChild(el);
-                    allNodes[`s${{d.stage}}-${{n.type}}`] = el;
+                    if (pos) {{
+                        const el = document.createElement('div');
+                        el.className = `node node-${{n.type}}`;
+                        el.style.left = pos.x + 'px';
+                        el.style.top = pos.y + 'px';
+                        el.textContent = n.type;
+                        el.dataset.text = n.definition || '';
+                        
+                        el.onmouseenter = (e) => showTip(e, n.type, el.dataset.text);
+                        el.onmousemove = moveTip;
+                        el.onmouseleave = hideTip;
+                        
+                        container.appendChild(el);
+                        allNodes[`s${{d.stage}}-${{n.type}}`] = el;
+                    }}
                 }});
             }});
 
-            // 3. 矢印描画
+            // 矢印描画
             data.forEach((d, i) => {{
                 const nextStage = data[i+1];
                 
@@ -255,19 +252,14 @@ def render_hp_visualization(hp_json: dict):
                     let src = allNodes[`s${{d.stage}}-${{a.source}}`];
                     let tgt = allNodes[`s${{d.stage}}-${{a.target}}`];
                     
-                    // === 重要: 世代間接続ロジック ===
-                    // is_inter フラグが True の場合、強制的に次の世代のノードを探す
+                    // 世代間接続ロジック
                     if (a.is_inter && nextStage) {{
                          tgt = allNodes[`s${{nextStage.stage}}-${{a.target}}`];
                     }}
                     
-                    // 最後の世代で、さらに次へ行こうとする矢印は描画しない
-                    if (a.is_inter && !nextStage) {{
-                        return;
-                    }}
+                    if (a.is_inter && !nextStage) return;
 
                     if (src && tgt) {{
-                        // is_inter が True なら点線 (Dotted/Dashed)
                         drawArrow(src, tgt, a.type, a.definition, a.is_inter);
                     }}
                 }});
@@ -275,7 +267,7 @@ def render_hp_visualization(hp_json: dict):
         }}
 
         function drawArrow(n1, n2, labelText, content, isDashed) {{
-            const x1 = parseFloat(n1.style.left) + 55; // node center (110/2)
+            const x1 = parseFloat(n1.style.left) + 55;
             const y1 = parseFloat(n1.style.top) + 55;
             const x2 = parseFloat(n2.style.left) + 55;
             const y2 = parseFloat(n2.style.top) + 55;
@@ -329,5 +321,4 @@ def render_hp_visualization(hp_json: dict):
 </html>
     '''
     
-    # 正しいメソッドを使用
     components.html(html_content, height=700, scrolling=True)
