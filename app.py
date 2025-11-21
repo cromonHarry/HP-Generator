@@ -362,7 +362,7 @@ if state.step4 and state.hp_json:
         with col1:
             mod = st.text_area("修正提案：", height=100, key="outline_modify")
 
-            if st.button("🔁 改進", key="btn_modify"):
+            if st.button("🔁 更新", key="btn_modify"):
                 if mod.strip():
                     with st.spinner("ストーリー概要修正中…"):
                         new_outline = modify_outline(state.outline, mod)
