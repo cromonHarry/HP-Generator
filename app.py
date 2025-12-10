@@ -54,7 +54,7 @@ def init_state():
         "s2_habit": False,
         "s2_ux": False,
         
-        # Step3 (完了) 状態  <--- 【修正箇所】ここを追加しました
+        # Step3 (完了) 状態
         "step4": False,
 
         # ユーザー選択
@@ -213,6 +213,8 @@ if state.step2:
                     with st.spinner("『社会の目標』候補を生成中…"):
                         # Chain start
                         hp_session.generate_mtplus1_candidates_chain()
+                        # 【重要修正】生成結果をStreamlitのstateに反映させる
+                        state.mtplus1 = hp_session.mtplus1_candidates
                     
                     state.s2_goal = True
                     st.rerun()
@@ -222,18 +224,20 @@ if state.step2:
         st.subheader("② 社会の目標")
         goals = state.mtplus1.get("goals", [])
         
-        idx_goal = st.radio("選択肢から選んでください:", list(range(len(goals))), format_func=lambda i: goals[i], key="radio_goal")
-        
-        c1, c2 = st.columns([1, 3])
-        if c1.button("戻る", key="back_goal"):
-            go_back()
-            st.rerun()
-        if c2.button("② 確定して次へ", key="btn_goal", type="primary"):
-            state.choice_goal = idx_goal
-            # 連鎖更新：Goals選択 -> Values候補再生成などが必要ならここで行うが
-            # 今回は generate.py で一括生成したリストを使用
-            state.s2_value = True
-            st.rerun()
+        # 万が一空の場合のエラーハンドリング
+        if not goals:
+            st.error("候補が生成されていません。前のステップに戻ってやり直してください。")
+        else:
+            idx_goal = st.radio("選択肢から選んでください:", list(range(len(goals))), format_func=lambda i: goals[i], key="radio_goal")
+            
+            c1, c2 = st.columns([1, 3])
+            if c1.button("戻る", key="back_goal"):
+                go_back()
+                st.rerun()
+            if c2.button("② 確定して次へ", key="btn_goal", type="primary"):
+                state.choice_goal = idx_goal
+                state.s2_value = True
+                st.rerun()
 
     # ③ 人々の価値観
     if state.s2_value and not state.s2_habit:
