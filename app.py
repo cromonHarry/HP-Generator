@@ -46,13 +46,8 @@ def init_state():
         "show_q3": False,
         "show_q4": False,
 
-        # Mt+1 5つの選択 全体フラグ
+        # Step2 状態
         "step2": False,
-
-        # HPモデル完成後 → アウトライン生成に進むフラグ
-        "step4": False,
-
-        # Step2 内部段階
         "s2_adv": False,
         "s2_goal": False,
         "s2_value": False,
@@ -71,11 +66,40 @@ def init_state():
         if k not in st.session_state:
             st.session_state[k] = v
 
-
 init_state()
 state = st.session_state
 hp_session: HPGenerationSession = state.hp_session
 
+# ============================================================
+#   Utilities: Back & Regenerate
+# ============================================================
+
+#  前の選択肢を遡って選択できる機能
+def go_back():
+    if state.s2_ux:
+        state.s2_ux = False
+        state.choice_ux = None
+    elif state.s2_habit:
+        state.s2_habit = False
+        state.choice_habit = None
+    elif state.s2_value:
+        state.s2_value = False
+        state.choice_value = None
+    elif state.s2_goal:
+        state.s2_goal = False
+        state.choice_goal = None
+    elif state.s2_adv:
+        # Step 2 -> Step 1 end
+        state.step2 = False
+        state.s2_adv = False
+        state.choice_adv = None
+
+#  選択肢を再提示する機能
+def regenerate_adv():
+    with st.spinner("前衛的社会問題の候補を再生成中（ユーザー入力をより強く反映します）..."):
+        hp_session.trigger_adv_candidates_generation()
+        hp_session.wait_all() # wait for result
+        state.adv_candidates = hp_session.get_future_adv_candidates()
 
 # ============================================================
 #   🟦 ステップ1：Q1〜Q4
@@ -83,13 +107,10 @@ hp_session: HPGenerationSession = state.hp_session
 
 st.header("ステップ 1：あなたの経験についての4つの質問", divider="grey")
 
-# ---------- Q1 ----------
+# ---------- Q1 [cite: 10] ----------
 st.subheader("Q1（Mt：日常の空間とユーザー体験）")
-q1 = st.text_area(
-    "最近あなた自身がした行動の中で、誇りに思える、あるいは独創性があると感じるものを思い出してください。",
-    key="input_q1",
-    height=60
-)
+q1_label = "あなたがすきなことをしている情景を思い出して、どのような時に、どのような場所で何をしているかという体験を書き出してください。"
+q1 = st.text_area(q1_label, key="input_q1", height=80)
 
 if st.button("Q1 を送信", key="btn_q1"):
     if not q1.strip():
@@ -99,13 +120,11 @@ if st.button("Q1 を送信", key="btn_q1"):
         state.show_q2 = True
         st.success("Q1 を受け取りました。続いて Q2 へ。")
 
-# ---------- Q2 ----------
+# ---------- Q2 [cite: 13] ----------
 if state.show_q2:
     st.subheader("Q2（Mt：製品・サービス）")
-    q2 = st.text_area(
-        "その行動を実現するために使用している製品やサービスは？",
-        key="input_q2", height=60
-    )
+    q2_label = "その一連の体験を成立させるために重要な製品やサービスを挙げてください。"
+    q2 = st.text_area(q2_label, key="input_q2", height=60)
 
     if st.button("Q2 を送信", key="btn_q2"):
         if not q2.strip():
@@ -115,13 +134,11 @@ if state.show_q2:
             state.show_q3 = True
             st.success("Q2 を受け取りました。続いて Q3 へ。")
 
-# ---------- Q3 ----------
+# ---------- Q3 [cite: 16] ----------
 if state.show_q3:
     st.subheader("Q3（Mt：意味付け）")
-    q3 = st.text_area(
-        "なぜ、その製品やサービスを使っていると思いますか？",
-        key="input_q3", height=60
-    )
+    q3_label = "あなたは、何のためにその製品やサービスを使用していますか？"
+    q3 = st.text_area(q3_label, key="input_q3", height=60)
 
     if st.button("Q3 を送信", key="btn_q3"):
         if not q3.strip():
@@ -131,197 +148,166 @@ if state.show_q3:
             state.show_q4 = True
             st.success("Q3 を受け取りました。続いて Q4 へ。")
 
-# ---------- Q4 ----------
-if state.show_q4:
+# ---------- Q4 [cite: 19] ----------
+if state.show_q4 and not state.step2:
     st.subheader("Q4（Mt：人々の価値観）")
-    q4 = st.text_area(
-        "その行動を通じて、どんな自分でありたいですか？",
-        key="input_q4", height=60
-    )
+    q4_label = "そのような体験を行うあなたはどんな自分でありたいですか？"
+    q4 = st.text_area(q4_label, key="input_q4", height=60)
 
     if st.button("Q4 を送信して Step2 開始", key="btn_q4"):
         if not q4.strip():
             st.warning("Q4に回答してください。")
         else:
-            with st.spinner("Mt・Mt-1・Mt+1 の初期情報を生成中…"):
-                hp_session.start_from_values(q4)
+            with st.spinner("Mt・Mt-1・Mt+1 の初期情報を生成中（あなたの価値観を未来へ接続します）…"):
+                hp_session.start_from_values_and_trigger_future(q4)
+                # wait for future candidates immediately for UI
+                hp_session.wait_all()
                 state.adv_candidates = hp_session.get_future_adv_candidates()
 
             state.step2 = True
             state.s2_adv = True
-            st.success("次へ：未来社会の『前衛的社会問題』を選んでください。")
+            st.rerun()
 
 
 # ============================================================
-#   🟩 ステップ2：未来社会（Mt+1）5つの選択
+#   🟩 ステップ2：未来社会 5つの選択
 # ============================================================
 
+#  (Mt+1) を削除
 if state.step2:
-    st.header("ステップ 2：未来社会（Mt+1）を構成する5つの選択", divider="grey")
-
-    cands = state.mtplus1
+    st.header("ステップ 2：未来社会を構成する5つの選択", divider="grey")
 
     # ① 前衛的社会問題
-    if state.s2_adv:
+    if state.s2_adv and not state.s2_goal:
         st.subheader("① 前衛的社会問題")
 
         adv = state.adv_candidates or []
         if not adv:
-            st.error("前衛的社会問題の候補が生成できませんでした。もう一度最初から試してください。")
+            st.error("前衛的社会問題の候補生成に失敗しました。再生成を試してください。")
         else:
             idx_adv = st.radio(
-                "以下の選択肢の中から、最も共感する前衛的社会問題を一つ選んでください。",
+                "あなたの価値観と体験から推測される、未来の「前衛的社会問題」です。最も共感するものを一つ選んでください。",
                 list(range(len(adv))),
                 format_func=lambda i: adv[i],
                 key="radio_adv"
             )
 
-            if st.button("① 前衛的社会問題を確定", key="btn_adv"):
-                state.choice_adv = idx_adv
-                hp_session.set_future_adv_choice(adv[idx_adv])
+            col1, col2, col3 = st.columns([1, 1, 2])
+            with col1:
+                if st.button("戻る", key="back_adv"):
+                    go_back()
+                    st.rerun()
+            with col2:
+                #  再生成ボタン
+                if st.button("候補を再生成", key="regen_adv"):
+                    regenerate_adv()
+                    st.rerun()
+            with col3:
+                if st.button("① 確定して次へ", key="btn_adv", type="primary"):
+                    state.choice_adv = idx_adv
+                    hp_session.set_future_adv_choice(adv[idx_adv])
 
-                with st.spinner("『社会の目標』候補を生成中…"):
-                    state.mtplus1["goals"] = list_up_gpt(
-                        "前衛的社会問題", adv[idx_adv], "社会の目標"
-                    )
-
-                state.s2_goal = True
-                st.success("②『社会の目標』を選択してください。")
+                    with st.spinner("『社会の目標』候補を生成中…"):
+                        # Chain start
+                        hp_session.generate_mtplus1_candidates_chain()
+                    
+                    state.s2_goal = True
+                    st.rerun()
 
     # ② 社会の目標
-    if state.s2_goal:
+    if state.s2_goal and not state.s2_value:
         st.subheader("② 社会の目標")
-
         goals = state.mtplus1.get("goals", [])
-        if not goals:
-            st.error("『社会の目標』候補が存在しません。")
-        else:
-            idx_goal = st.radio(
-                "以下の選択肢の中から、最も共感する社会の目標を一つ選んでください。",
-                list(range(len(goals))),
-                format_func=lambda i: goals[i],
-                key="radio_goal"
-            )
-
-            if st.button("② 社会の目標を確定", key="btn_goal"):
-                state.choice_goal = idx_goal
-                goal_text = goals[idx_goal]
-
-                with st.spinner("『人々の価値観』候補を生成中…"):
-                    state.mtplus1["values"] = list_up_gpt(
-                        "社会の目標", goal_text, "人々の価値観"
-                    )
-
-                state.s2_value = True
-                st.success("③『人々の価値観』を選択してください。")
+        
+        idx_goal = st.radio("選択肢から選んでください:", list(range(len(goals))), format_func=lambda i: goals[i], key="radio_goal")
+        
+        c1, c2 = st.columns([1, 3])
+        if c1.button("戻る", key="back_goal"):
+            go_back()
+            st.rerun()
+        if c2.button("② 確定して次へ", key="btn_goal", type="primary"):
+            state.choice_goal = idx_goal
+            # 連鎖更新：Goals選択 -> Values候補再生成などが必要ならここで行うが
+            # 今回は generate.py で一括生成したリストを使用
+            state.s2_value = True
+            st.rerun()
 
     # ③ 人々の価値観
-    if state.s2_value:
+    if state.s2_value and not state.s2_habit:
         st.subheader("③ 人々の価値観")
-
         values = state.mtplus1.get("values", [])
-        if not values:
-            st.error("『人々の価値観』候補が存在しません。")
-        else:
-            idx_value = st.radio(
-                "以下の選択肢の中から、最も共感する未来人が共有する価値観を一つ選んでください。",
-                list(range(len(values))),
-                format_func=lambda i: values[i],
-                key="radio_value"
-            )
+        
+        idx_value = st.radio("選択肢から選んでください:", list(range(len(values))), format_func=lambda i: values[i], key="radio_value")
 
-            if st.button("③ 人々の価値観を確定", key="btn_value"):
-                state.choice_value = idx_value
-                value_text = values[idx_value]
-
-                with st.spinner("『慣習化』および『日常の空間とUX』候補を生成中…"):
-                    state.mtplus1["habits"] = list_up_gpt(
-                        "人々の価値観", value_text, "慣習化"
-                    )
-                    habits = state.mtplus1["habits"]
-                    base_habit = habits[0] if habits else ""
-                    state.mtplus1["ux_future"] = list_up_gpt(
-                        "慣習化", base_habit, "日常の空間とユーザー体験"
-                    )
-
-                state.s2_habit = True
-                st.success("④『慣習化』を選択してください。")
+        c1, c2 = st.columns([1, 3])
+        if c1.button("戻る", key="back_value"):
+            go_back()
+            st.rerun()
+        if c2.button("③ 確定して次へ", key="btn_value", type="primary"):
+            state.choice_value = idx_value
+            state.s2_habit = True
+            st.rerun()
 
     # ④ 慣習化
-    if state.s2_habit:
+    if state.s2_habit and not state.s2_ux:
         st.subheader("④ 慣習化")
-
         habits = state.mtplus1.get("habits", [])
-        if not habits:
-            st.error("『慣習化』候補が存在しません。")
-        else:
-            idx_habit = st.radio(
-                "以下の選択肢の中から、最も共感する未来人が共有する習慣を一つ選んでください。",
-                list(range(len(habits))),
-                format_func=lambda i: habits[i],
-                key="radio_habit"
-            )
+        
+        idx_habit = st.radio("選択肢から選んでください:", list(range(len(habits))), format_func=lambda i: habits[i], key="radio_habit")
 
-            if st.button("④ 慣習化を確定", key="btn_habit"):
-                state.choice_habit = idx_habit
-                state.s2_ux = True
-                st.success("⑤『日常の空間とUX』を選択してください。")
+        c1, c2 = st.columns([1, 3])
+        if c1.button("戻る", key="back_habit"):
+            go_back()
+            st.rerun()
+        if c2.button("④ 確定して次へ", key="btn_habit", type="primary"):
+            state.choice_habit = idx_habit
+            state.s2_ux = True
+            st.rerun()
 
     # ⑤ UX
-    if state.s2_ux:
+    if state.s2_ux and not state.step4:
         st.subheader("⑤ 日常の空間とユーザー体験")
-
         ux_list = state.mtplus1.get("ux_future", [])
-        if not ux_list:
-            st.error("『日常の空間とUX』候補が存在しません。")
-        else:
-            idx_ux = st.radio(
-                "以下の選択肢の中から、最も共感する未来人が共有するユーザー体験を一つ選んでください。",
-                list(range(len(ux_list))),
-                format_func=lambda i: ux_list[i],
-                key="radio_ux"
-            )
+        
+        idx_ux = st.radio("選択肢から選んでください:", list(range(len(ux_list))), format_func=lambda i: ux_list[i], key="radio_ux")
 
-            if st.button("三世代HPモデルを完成させる", key="btn_finish", type="primary"):
-                state.choice_ux = idx_ux
+        c1, c2 = st.columns([1, 3])
+        if c1.button("戻る", key="back_ux"):
+            go_back()
+            st.rerun()
+        
+        if c2.button("三世代HPモデルを完成させる", key="btn_finish", type="primary"):
+            state.choice_ux = idx_ux
 
-                # generate.py に候補を渡す
-                hp_session.mtplus1_candidates = state.mtplus1
+            with st.spinner("HPモデル（三世代）を最終構築中…"):
+                hp_session.apply_mtplus1_choices(
+                    state.choice_goal,
+                    state.choice_value,
+                    state.choice_habit,
+                    state.choice_ux,
+                )
+                hp_session.wait_all()
+                state.hp_json = hp_session.to_dict()
 
-                with st.spinner("HPモデル（三世代）を最終生成中…"):
-                    hp_session.apply_mtplus1_choices(
-                        state.choice_goal,
-                        state.choice_value,
-                        state.choice_habit,
-                        state.choice_ux,
-                    )
-                    hp_session.wait_all()
-                    state.hp_json = hp_session.to_dict()
-
-                state.step4 = True
-                st.success("HPモデルが完成しました！ステップ 3 へ。")
+            state.step4 = True
+            st.rerun()
 
 
 # ============================================================
-#   🟪 ステップ3：SF物語アウトライン生成（改進 / 確定）
+#   🟪 ステップ3：SF物語アウトライン生成
 # ============================================================
 
 if state.step4 and state.hp_json:
     st.header("ステップ 3：HPモデルの可視化 & 物語生成", divider="grey")
     
-    st.info("完成したHPモデル（三世代）の構造図です。ノードや矢印にマウスを乗せると詳細が表示されます。")
-    
-    # 这里的 state.hp_json 包含 hp_mt_0, hp_mt_1, hp_mt_2
+    st.info("完成したHPモデル（三世代）の構造図です。ノードにマウスを乗せると詳細が表示されます。")
+    #  visualization.py 側で全ノード描画に対応済み
     render_hp_visualization(state.hp_json)
     
-    st.write("---") # 分隔线
-    # -------------------------
+    st.write("---") 
 
-    st.subheader("SF物語ストーリー概要生成") # 修改标题层级以适应结构
+    st.subheader("SF物語ストーリー概要生成")
 
-    # -------------------------------
-    # ① 初次生成アウトライン
-    # -------------------------------
     if state.outline is None:
         if st.button("✨ ストーリー概要を生成", key="btn_generate_outline"):
             with st.spinner("GPT によるストーリー概要生成中…"):
@@ -336,49 +322,23 @@ if state.step4 and state.hp_json:
             st.success("ストーリー概要が生成されました。")
             st.rerun()
 
-    # -------------------------------
-    # ② アウトライン表示 & 改進
-    # -------------------------------
     if state.outline:
-
-        # ⭐ 动态容器（text_area を毎回再描画するため）
         st.subheader("現在のストーリー概要：")
-        outline_container = st.empty()
+        st.text_area(label="", value=state.outline, height=300, disabled=True)
 
-        # 上下换行、只读显示最新内容
-        outline_container.text_area(
-            label="",
-            value=state.outline,
-            height=300,
-            disabled=True
-        )
-
-        # 左右按钮
         col1, col2 = st.columns(2)
-
-        # -------------------------------
-        # 🟦 改進
-        # -------------------------------
         with col1:
             mod = st.text_area("修正提案：", height=100, key="outline_modify")
-
             if st.button("🔁 更新", key="btn_modify"):
                 if mod.strip():
                     with st.spinner("ストーリー概要修正中…"):
                         new_outline = modify_outline(state.outline, mod)
                         state.outline = new_outline
-
                     st.success("ストーリー概要が更新されました。")
-
-                    # ⭐ 强制刷新 → 新内容立即显示在上方
                     st.rerun()
-
                 else:
                     st.warning("修正内容を入力してください。")
 
-        # -------------------------------
-        # 🟩 確定
-        # -------------------------------
         with col2:
             if st.button("✔️ 確定", key="btn_confirm"):
                 state.final_confirmed = True
@@ -386,7 +346,7 @@ if state.step4 and state.hp_json:
 
 
 # ============================================================
-#   🟫 STEP4：ダウンロード（確定後に表示）
+#   🟫 STEP4：ダウンロード
 # ============================================================
 
 if state.final_confirmed and state.hp_json and state.outline:

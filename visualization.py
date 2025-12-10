@@ -4,41 +4,32 @@ import json
 import streamlit.components.v1 as components
 from prompt import HP_model
 
-# HPモデルのトポロジー定義（ユーザー指摘に基づく修正版）
-# Key: Arrow ID, Value: (Source Node ID, Target Node ID, Is_Inter_Generation)
-# Is_Inter_Generation=True の場合は点線で次世代（Mt+1）に接続する
+# HPモデルのトポロジー定義
 HP_TOPOLOGY = {
-    # === 同世代 (Intra-generation / 実線) ===
-    # [ユーザー修正] パラダイム: 技術・資源 -> 前衛的社会問題
+    # Intra-generation
     16: (4, 1, False),
-    # [ユーザー修正] 文化芸術振興: 前衛的社会問題 -> 人々の価値観
     9:  (1, 2, False),
-    # [ユーザー修正] コミュニケーション: 社会問題 -> 人々の価値観
     11: (3, 2, False),
+    7:  (6, 3, False),
+    8:  (1, 3, False),
+    12: (3, 4, False),
+    14: (4, 5, False),
+    17: (5, 6, False),
+    18: (5, 1, False),
     
-    # 既存の同世代接続
-    7:  (6, 3, False),  # メディア: 制度 -> 社会問題
-    8:  (1, 3, False),  # コミュニティ化: 前衛的社会問題 -> 社会問題
-    12: (3, 4, False),  # 組織化: 社会問題 -> 技術・資源
-    14: (4, 5, False),  # 製品・サービス: 技術・資源 -> UX
-    17: (5, 6, False),  # ビジネスエコシステム: UX -> 制度
-    18: (5, 1, False),  # アート: UX -> 前衛的社会問題
-    
-    # === 次世代 (Inter-generation / 点線 / 時間的差異あり) ===
-    # 主に「価値観」や「制度」が次の時代を作る駆動力となる矢印
-    # ⚠️ 注意: 以下の行がエラーになる場合、上の行(18番)の末尾にカンマがあるか確認してください
-    10: (6, 4, True),   # 標準化: (旧)制度 -> (新)技術・資源
-    13: (2, 5, True),   # 意味付け: (旧)人々の価値観 -> (新)UX
-    15: (2, 6, True),   # 習慣化: (旧)人々の価値観 -> (新)制度
+    # Inter-generation (Next Generation)
+    10: (6, 4, True),   # 制度 -> (次)技術
+    13: (2, 5, True),   # 価値観 -> (次)UX
+    15: (2, 6, True),   # 価値観 -> (次)制度
 }
 
 NODE_IDS = [1, 2, 3, 4, 5, 6]
 
 def transform_data_for_vis(hp_json: dict) -> list:
     stages = [
-        {"key": "hp_mt_0", "stage_idx": 0}, # Mt-1: 過去
-        {"key": "hp_mt_1", "stage_idx": 1}, # Mt: 現在
-        {"key": "hp_mt_2", "stage_idx": 2}, # Mt+1: 未来
+        {"key": "hp_mt_0", "stage_idx": 0}, # Mt-1
+        {"key": "hp_mt_1", "stage_idx": 1}, # Mt
+        {"key": "hp_mt_2", "stage_idx": 2}, # Mt+1
     ]
     
     vis_data = []
@@ -48,29 +39,31 @@ def transform_data_for_vis(hp_json: dict) -> list:
         nodes = []
         arrows = []
 
-        # 1. ノード構築
+        #  入力がない要素も描写する（完全なHPモデルの描写）
+        # データがない場合は "（未定義）" または空文字を入れるが、ノード自体は生成する
         for nid in NODE_IDS:
             node_name = HP_model[nid]
-            if node_name in raw_data:
-                nodes.append({
-                    "type": node_name,
-                    "definition": raw_data[node_name]
-                })
+            definition = raw_data.get(node_name, "...") # データがなくてもノード作成
+            nodes.append({
+                "type": node_name,
+                "definition": definition
+            })
 
-        # 2. 矢印構築
+        # 矢印構築
         for arrow_id, (src_id, tgt_id, is_inter) in HP_TOPOLOGY.items():
             arrow_name = HP_model[arrow_id]
             src_name = HP_model[src_id]
             tgt_name = HP_model[tgt_id]
             
-            if arrow_name in raw_data:
-                arrows.append({
-                    "type": arrow_name,
-                    "definition": raw_data[arrow_name],
-                    "source": src_name,
-                    "target": tgt_name,
-                    "is_inter": is_inter
-                })
+            definition = raw_data.get(arrow_name, "")
+            
+            arrows.append({
+                "type": arrow_name,
+                "definition": definition,
+                "source": src_name,
+                "target": tgt_name,
+                "is_inter": is_inter
+            })
 
         vis_data.append({
             "stage": stage["stage_idx"],
@@ -84,12 +77,15 @@ def transform_data_for_vis(hp_json: dict) -> list:
 
 def render_hp_visualization(hp_json: dict):
     if not hp_json:
-        st.warning("可視化するデータがありません。")
         return
 
     vis_data_list = transform_data_for_vis(hp_json)
     json_str = json.dumps(vis_data_list, ensure_ascii=False)
 
+    # (HTML/JS部分は既存のものを維持しつつ、ノードが必ず存在することを前提に動作)
+    # ここでは既存コードの長いHTML文字列を再利用します。
+    # 変更点: ノードのデータが空でもクリックできるようにする等はJS側でよしなに処理される
+    
     html_content = f'''
 <!DOCTYPE html>
 <html lang="ja">
@@ -100,7 +96,6 @@ def render_hp_visualization(hp_json: dict):
         .vis-wrapper {{ overflow-x: auto; border: 1px solid #eee; border-radius: 8px; background: white; padding-bottom: 30px; }}
         .visualization {{ position: relative; width: 1450px; height: 680px; background: #fff; margin: 0 auto; }}
         
-        /* Node Styles */
         .node {{
             position: absolute; width: 110px; height: 110px; border-radius: 50%;
             display: flex; align-items: center; justify-content: center;
@@ -120,7 +115,9 @@ def render_hp_visualization(hp_json: dict):
         .node-日常の空間とユーザー体験 {{ background: #bae1ff; border-color: #3399ff; }}
         .node-制度 {{ background: #e1baff; border-color: #9933ff; }}
         
-        /* Arrow Styles */
+        /* Empty Node Style (Optional) */
+        .node[data-text="..."] {{ opacity: 0.6; border-style: dashed; }}
+
         .arrow {{ position: absolute; height: 2px; background: #999; transform-origin: left center; z-index: 1; pointer-events: none; }}
         .arrow::after {{
             content: ''; position: absolute; right: -8px; top: -4px;
@@ -129,7 +126,6 @@ def render_hp_visualization(hp_json: dict):
         .dotted-arrow {{ border-top: 2px dashed #999; background: transparent; height: 0px; }}
         .dotted-arrow::after {{ border-left-color: #999; }}
         
-        /* Arrow Label */
         .arrow-label {{
             position: absolute; background: white; padding: 2px 8px;
             border: 1px solid #ccc; border-radius: 12px; font-size: 10px; color: #555;
@@ -138,7 +134,6 @@ def render_hp_visualization(hp_json: dict):
         }}
         .arrow-label:hover {{ background: #f9f9f9; color: #000; border-color: #888; z-index: 100; }}
 
-        /* Tooltip */
         .tooltip {{
             position: fixed; background: rgba(40, 40, 40, 0.95); color: #fff;
             padding: 12px 16px; border-radius: 6px; font-size: 13px; line-height: 1.6;
@@ -165,25 +160,21 @@ def render_hp_visualization(hp_json: dict):
         let allNodes = {{}};
         const data = {json_str};
 
-        // === 座標計算ロジック (正三角・逆三角レイアウト) ===
         function getNodePosition(stageIdx, nodeType) {{
-            const stageWidth = 460; // 世代間の幅
+            const stageWidth = 460;
             const startX = 40;
             const offsetX = startX + (stageIdx * stageWidth);
             
-            // Y座標
             const yTop = 60;
             const yMid = 260;
             const yBot = 480;
 
-            // 世代内のX相対座標
             const xLeft = 20;
             const xMidLeft = 120;
             const xCenter = 205;
             const xMidRight = 290;
             const xRight = 370;
 
-            // 偶数世代 (0=Mt-1, 2=Mt+1) : 正三角形（ピラミッド）
             if (stageIdx % 2 === 0) {{
                 if (nodeType === '制度')                      return {{ x: offsetX + xCenter, y: yTop }};
                 if (nodeType === '日常の空間とユーザー体験')  return {{ x: offsetX + xMidLeft, y: yMid }};
@@ -192,7 +183,6 @@ def render_hp_visualization(hp_json: dict):
                 if (nodeType === '前衛的社会問題')            return {{ x: offsetX + xCenter, y: yBot }};
                 if (nodeType === '人々の価値観')              return {{ x: offsetX + xRight, y: yBot }};
             }} 
-            // 奇数世代 (1=Mt: 現在) : 逆三角形（逆ピラミッド）
             else {{
                 if (nodeType === '技術や資源')              return {{ x: offsetX + xLeft,  y: yTop }};
                 if (nodeType === '前衛的社会問題')            return {{ x: offsetX + xCenter, y: yTop }};
@@ -208,7 +198,6 @@ def render_hp_visualization(hp_json: dict):
             container.innerHTML = '';
             allNodes = {{}};
             
-            // ステージラベル
             ['Mt-1: 過去', 'Mt: 現在', 'Mt+1: 未来'].forEach((label, i) => {{
                 const div = document.createElement('div');
                 div.className = 'stage-label';
@@ -217,7 +206,6 @@ def render_hp_visualization(hp_json: dict):
                 container.appendChild(div);
             }});
 
-            // ノード描画
             data.forEach(d => {{
                 d.ap_model.nodes.forEach(n => {{
                     const pos = getNodePosition(d.stage, n.type);
@@ -239,7 +227,6 @@ def render_hp_visualization(hp_json: dict):
                 }});
             }});
 
-            // 矢印描画
             data.forEach((d, i) => {{
                 const nextStage = data[i+1];
                 
@@ -247,7 +234,6 @@ def render_hp_visualization(hp_json: dict):
                     let src = allNodes[`s${{d.stage}}-${{a.source}}`];
                     let tgt = allNodes[`s${{d.stage}}-${{a.target}}`];
                     
-                    // 世代間接続ロジック
                     if (a.is_inter && nextStage) {{
                          tgt = allNodes[`s${{nextStage.stage}}-${{a.target}}`];
                     }}
@@ -283,7 +269,6 @@ def render_hp_visualization(hp_json: dict):
             arrow.style.transform = `rotate(${{angle}}deg)`;
             container.appendChild(arrow);
             
-            // Label
             const lbl = document.createElement('div');
             lbl.className = 'arrow-label';
             lbl.innerText = labelText;
@@ -297,7 +282,7 @@ def render_hp_visualization(hp_json: dict):
         }}
 
         function showTip(e, title, text) {{
-            if (!text) return;
+            if (!text || text === '...') return;
             tooltip.innerHTML = `<strong>${{title}}</strong><br>${{text.substring(0, 200)}}...`;
             tooltip.classList.add('show');
             moveTip(e);
@@ -315,5 +300,4 @@ def render_hp_visualization(hp_json: dict):
 </body>
 </html>
     '''
-    
     components.html(html_content, height=700, scrolling=True)
