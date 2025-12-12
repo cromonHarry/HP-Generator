@@ -29,7 +29,6 @@ class HPGenerationSession:
 
         self.future_candidates_adv: Optional[Future] = None
         
-        # 候補リストを保持する辞書
         self.mtplus1_candidates = {
             "goals": [],
             "values": [],
@@ -37,25 +36,33 @@ class HPGenerationSession:
             "ux_future": [],
         }
 
-    # ============ Tavily Wrapper ============
+    # ============ Utils ============
     def tavily_from_nodes(self, input_id: int, input_text: str, output_id: int, time_state: int) -> str:
+        # time_state: 0=過去, 1=現在
         return tavily_generate_answer(
             generate_question_for_tavily(HP_model[input_id], input_text, HP_model[output_id], time_state)
         )
 
-    # ============ Input Handling (Step 1) ============
+    def simple_fill(self, input_id: int, input_text: str, output_id: int) -> str:
+        # GPTのみで高速に埋める（Tavilyなし）
+        return single_gpt(HP_model[input_id], input_text, HP_model[output_id])
+
+    # ============ Step 1: User Input Handling ============
+
     def handle_input1(self, ux_text: str):
+        # Mtのゴール地点としてのUX (HP:5)
         self.hp_mt_1[HP_model[5]] = ux_text 
         self.user_inputs["q1_ux"] = ux_text
         
-        # UX -> Art
+        # UXから派生する「現在」の要素を検索
         def job_art():
+            # UX -> Art (18)
             art = self.tavily_from_nodes(5, ux_text, 18, 1)
             self.hp_mt_1[HP_model[18]] = art
             return art
         
-        # UX -> BusinessEcosystem -> Institution
         def job_be_and_inst():
+            # UX -> BizEco (17) -> Institution (6)
             be = self.tavily_from_nodes(5, ux_text, 17, 1)
             self.hp_mt_1[HP_model[17]] = be
             inst = self.tavily_from_nodes(17, be, 6, 1)
@@ -69,8 +76,8 @@ class HPGenerationSession:
         self.hp_mt_1[HP_model[14]] = product_text
         self.user_inputs["q2_product"] = product_text
         
-        # Product -> Tech
         def job_tech_mt():
+            # Product -> Tech (4)
             tech = self.tavily_from_nodes(14, product_text, 4, 1)
             self.hp_mt_1[HP_model[4]] = tech
             return tech
@@ -84,22 +91,19 @@ class HPGenerationSession:
         self.hp_mt_1[HP_model[2]] = values_text
         self.user_inputs["q4_value"] = values_text
         
-        # Background: Mt & Past Chain
-        self.all_futures.append(self.executor.submit(self.job_mt_and_past_from_values, values_text))
+        # 過去(Mt-1)と現在(Mt)の残りを埋めるジョブを開始
+        self.all_futures.append(self.executor.submit(self.job_fill_past_and_present, values_text))
 
-        # Future: Adv Candidates
+        # 未来(Mt+1)の候補生成を開始
         self.trigger_adv_candidates_generation()
 
     def trigger_adv_candidates_generation(self):
         def job_candidates():
-            # Wait for Art if possible, or get empty string
             art_text = self.hp_mt_1.get(HP_model[18], "")
-            
             context = f"""
-ユーザーの現在の行動(UX): {self.user_inputs['q1_ux']}
-ユーザーの価値観: {self.user_inputs['q4_value']}
-現在のアート/社会批評: {art_text}
-これらの要素が突き詰められた結果、あるいは反動として生まれる未来の問題を予測してください。
+現在のUX: {self.user_inputs['q1_ux']}
+現在の価値観: {self.user_inputs['q4_value']}
+この状況が行き着く先、あるいはこれに対する反動として生まれる未来の問題を予測してください。
 """
             candidates = list_up_gpt(
                 input_node="現在のアートおよびユーザー体験",
@@ -112,84 +116,149 @@ class HPGenerationSession:
         self.future_candidates_adv = self.executor.submit(job_candidates)
         self.all_futures.append(self.future_candidates_adv)
 
-    # ============ Background Logic: Mt / Mt-1 ============
-    def job_mt_and_past_from_values(self, values_text: str):
-        # Mt Loop
-        self.hp_mt_1[HP_model[9]] = self.tavily_from_nodes(2, values_text, 9, 1)
-        self.hp_mt_1[HP_model[11]] = self.tavily_from_nodes(2, values_text, 11, 1)
-        self.hp_mt_1[HP_model[3]] = self.tavily_from_nodes(2, values_text, 3, 1)
+    # ============ Background: Fill Past (Mt-1) & Present (Mt) ============
+
+    def job_fill_past_and_present(self, values_text: str):
+        """
+        Mtの完全化と、そこから逆算したMt-1の生成を行う
+        """
+        # 1. Mt (現在) の不足分を埋める
+        # 価値観(2) -> 習慣(15), コミュニケーション(11), 文化芸術(9), 社会問題(3)
         self.hp_mt_1[HP_model[15]] = self.tavily_from_nodes(2, values_text, 15, 1)
-        
-        # Mt SocProblem -> Community -> AdvProblem (Mt)
-        self.hp_mt_1[HP_model[8]] = self.tavily_from_nodes(3, self.hp_mt_1[HP_model[3]], 8, 1)
+        self.hp_mt_1[HP_model[11]] = self.simple_fill(2, values_text, 11)
+        self.hp_mt_1[HP_model[9]] = self.simple_fill(2, values_text, 9)
+        self.hp_mt_1[HP_model[3]] = self.tavily_from_nodes(2, values_text, 3, 1)
+
+        # 社会問題(3) -> コミュニティ(8) -> 前衛的問題(1)
+        self.hp_mt_1[HP_model[8]] = self.simple_fill(3, self.hp_mt_1[HP_model[3]], 8)
         self.hp_mt_1[HP_model[1]] = self.tavily_from_nodes(8, self.hp_mt_1[HP_model[8]], 1, 1)
+        
+        # 社会問題(3) -> 組織化(12) -> 技術(4, 既存確認)
+        self.hp_mt_1[HP_model[12]] = self.simple_fill(3, self.hp_mt_1[HP_model[3]], 12)
+        
+        # 制度(6) -> 標準化(10), メディア(7)
+        inst_text = self.hp_mt_1.get(HP_model[6], "現代の制度")
+        self.hp_mt_1[HP_model[10]] = self.simple_fill(6, inst_text, 10)
+        self.hp_mt_1[HP_model[7]] = self.simple_fill(6, inst_text, 7)
 
-        # Mt-1 Generation
-        self.hp_mt_0[HP_model[16]] = self.tavily_from_nodes(1, self.hp_mt_1[HP_model[1]], 16, 0)
-        self.hp_mt_0[HP_model[18]] = self.tavily_from_nodes(1, self.hp_mt_1[HP_model[1]], 18, 0)
-        self.hp_mt_0[HP_model[4]] = self.tavily_from_nodes(16, self.hp_mt_0[HP_model[16]], 4, 0)
+        # 技術(4) -> パラダイム(16)
+        tech_text = self.hp_mt_1.get(HP_model[4], "現代の技術")
+        self.hp_mt_1[HP_model[16]] = self.simple_fill(4, tech_text, 16)
+
+
+        # 2. Mt-1 (過去) の生成
+        # ロジック: Mtの開始点(パラダイム16, アート18) は、Mt-1の終了点(UX)から来る
+        # しかしモデル上は、Mtの前衛的社会問題(1)が、Mt-1のパラダイム(16)/アート(18)とリンクしやすい
+        # ここでは「Mtの前衛的社会問題(1)」の原因となった「過去のパラダイム(16)」を探る
+        
+        mt_adv = self.hp_mt_1.get(HP_model[1], "")
+        
+        # Mt(1) -> Mt-1(16) パラダイム (過去の技術基盤)
+        self.hp_mt_0[HP_model[16]] = self.tavily_from_nodes(1, mt_adv, 16, 0)
+        
+        # Mt-1(16) -> Mt-1(4) 技術
+        self.hp_mt_0[HP_model[4]] = self.simple_fill(16, self.hp_mt_0[HP_model[16]], 4)
+
+        # Mt(1) -> Mt-1(18) アート (過去の社会批評)
+        self.hp_mt_0[HP_model[18]] = self.simple_fill(1, mt_adv, 18)
+        
+        # Mt-1(18) -> Mt-1(5) UX (【重要】過去のUX空間)
+        # これがMtの始点となる
         self.hp_mt_0[HP_model[5]] = self.tavily_from_nodes(18, self.hp_mt_0[HP_model[18]], 5, 0)
-        self.hp_mt_0[HP_model[6]] = self.tavily_from_nodes(3, self.hp_mt_1[HP_model[3]], 6, 0)
 
-    # ============ Mt+1 Step-by-Step Logic (Step 2) ============
+        # Mt-1の残りをUX(5)から逆算的に埋める
+        # UX(5) -> BizEco(17) -> Inst(6)
+        self.hp_mt_0[HP_model[17]] = self.simple_fill(5, self.hp_mt_0[HP_model[5]], 17)
+        self.hp_mt_0[HP_model[6]] = self.simple_fill(17, self.hp_mt_0[HP_model[17]], 6)
+        
+        # UX(5) -> Meaning(13) -> Value(2) (過去の価値観)
+        self.hp_mt_0[HP_model[13]] = "製品を使用する理由" # 簡易
+        self.hp_mt_0[HP_model[14]] = "過去の製品"
+        # 逆算は難しいので、制度(6) -> メディア(7) -> 社会問題(3) -> 価値観(2) の順で推測
+        self.hp_mt_0[HP_model[7]] = self.simple_fill(6, self.hp_mt_0[HP_model[6]], 7)
+        self.hp_mt_0[HP_model[3]] = self.simple_fill(7, self.hp_mt_0[HP_model[7]], 3)
+        self.hp_mt_0[HP_model[11]] = self.simple_fill(3, self.hp_mt_0[HP_model[3]], 11)
+        self.hp_mt_0[HP_model[2]] = self.simple_fill(11, self.hp_mt_0[HP_model[11]], 2)
+        
+        # 残りの埋め合わせ
+        self.hp_mt_0[HP_model[1]] = self.simple_fill(16, self.hp_mt_0[HP_model[16]], 1) # パラダイムから前衛へ
+        self.hp_mt_0[HP_model[8]] = self.simple_fill(3, self.hp_mt_0[HP_model[3]], 8)
+        self.hp_mt_0[HP_model[9]] = self.simple_fill(1, self.hp_mt_0[HP_model[1]], 9)
+        self.hp_mt_0[HP_model[10]] = self.simple_fill(6, self.hp_mt_0[HP_model[6]], 10)
+        self.hp_mt_0[HP_model[12]] = self.simple_fill(3, self.hp_mt_0[HP_model[3]], 12)
+        self.hp_mt_0[HP_model[15]] = self.simple_fill(2, self.hp_mt_0[HP_model[2]], 15)
+
+    # ============ Step 2: Mt+1 Future Generation ============
 
     def get_future_adv_candidates(self) -> List[str]:
         if self.future_candidates_adv:
             return self.future_candidates_adv.result()
         return []
 
-    # 1. 前衛的社会問題が決まったら -> コミュニティ化(自動) -> 社会の目標(候補)
     def generate_goals_from_adv(self, adv_text: str) -> List[str]:
         self.hp_mt_2[HP_model[1]] = adv_text
-        
-        # Mt+1 コミュニティ化 (自動生成)
+        # Mt+1 コミュニティ(8)
         self.hp_mt_2[HP_model[8]] = single_gpt(
             HP_model[1], adv_text, HP_model[8],
-            context=f"過去からの文脈（ユーザー価値観）: {self.user_inputs['q4_value']}"
+            context=f"過去からの文脈: {self.user_inputs['q4_value']}"
         )
-        
-        # 社会の目標 (候補生成)
+        # Mt+1 文化芸術(9) も埋めておく
+        self.hp_mt_2[HP_model[9]] = self.simple_fill(1, adv_text, 9)
+
+        # 社会の目標候補
         self.mtplus1_candidates["goals"] = list_up_gpt(
             HP_model[8], self.hp_mt_2[HP_model[8]], HP_model[3], 
             context="ユーザーが望む、あるいは恐れる未来の社会目標として"
         )
         return self.mtplus1_candidates["goals"]
 
-    # 2. 社会の目標が決まったら -> 人々の価値観(候補)
     def generate_values_from_goal(self, goal_text: str) -> List[str]:
         self.hp_mt_2[HP_model[3]] = goal_text
+        # Mt+1 組織化(12), コミュニケーション(11)
+        self.hp_mt_2[HP_model[12]] = self.simple_fill(3, goal_text, 12)
+        self.hp_mt_2[HP_model[11]] = self.simple_fill(3, goal_text, 11)
+
         self.mtplus1_candidates["values"] = list_up_gpt(
             HP_model[3], goal_text, HP_model[2],
             context="その社会目標を実現するために必要な価値観"
         )
         return self.mtplus1_candidates["values"]
 
-    # 3. 人々の価値観が決まったら -> 慣習化(候補)
     def generate_habits_from_value(self, value_text: str) -> List[str]:
         self.hp_mt_2[HP_model[2]] = value_text
+        # Mt+1 意味付け(13)
+        self.hp_mt_2[HP_model[13]] = self.simple_fill(2, value_text, 13)
+
         self.mtplus1_candidates["habits"] = list_up_gpt(
             HP_model[2], value_text, HP_model[15],
             context="その価値観が普及した社会での日常的な習慣"
         )
         return self.mtplus1_candidates["habits"]
 
-    # 4. 慣習化が決まったら -> UX空間(候補)
     def generate_ux_from_habit(self, habit_text: str) -> List[str]:
         self.hp_mt_2[HP_model[15]] = habit_text
+        # Mt+1 制度(6)
+        self.hp_mt_2[HP_model[6]] = single_gpt(HP_model[15], habit_text, HP_model[6])
+        # Mt+1 標準化(10), メディア(7)
+        self.hp_mt_2[HP_model[10]] = self.simple_fill(6, self.hp_mt_2[HP_model[6]], 10)
+        self.hp_mt_2[HP_model[7]] = self.simple_fill(6, self.hp_mt_2[HP_model[6]], 7)
+
         self.mtplus1_candidates["ux_future"] = list_up_gpt(
             HP_model[15], habit_text, HP_model[5],
             context="その習慣が行われる物理的・デジタルな空間や体験"
         )
         return self.mtplus1_candidates["ux_future"]
 
-    # 5. UX空間が決まったら -> 最終処理
     def finalize_mtplus1(self, ux_text: str):
+        # Mt+1 UX(5)
         self.hp_mt_2[HP_model[5]] = ux_text
         
-        # 残りの要素を生成 (Prod, Tech, Std)
-        self.hp_mt_2[HP_model[14]] = single_gpt(HP_model[5], ux_text, HP_model[14])
-        self.hp_mt_2[HP_model[4]] = single_gpt(HP_model[14], self.hp_mt_2[HP_model[14]], HP_model[4])
-        self.hp_mt_2[HP_model[10]] = single_gpt(HP_model[6], self.hp_mt_1.get(HP_model[6],""), HP_model[10])
+        # 残り: BizEco(17), Prod(14), Tech(4), Paradigm(16), Art(18)
+        self.hp_mt_2[HP_model[17]] = self.simple_fill(5, ux_text, 17)
+        self.hp_mt_2[HP_model[14]] = self.simple_fill(5, ux_text, 14)
+        self.hp_mt_2[HP_model[18]] = self.simple_fill(5, ux_text, 18)
+        self.hp_mt_2[HP_model[4]] = self.simple_fill(14, self.hp_mt_2[HP_model[14]], 4)
+        self.hp_mt_2[HP_model[16]] = self.simple_fill(4, self.hp_mt_2[HP_model[4]], 16)
 
     def wait_all(self):
         for f in self.all_futures:
