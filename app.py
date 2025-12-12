@@ -45,7 +45,6 @@ def init_state():
         
         "step4": False,
         
-        # 選択されたテキスト自体を保存するように変更
         "text_adv": None,
         "text_goal": None,
         "text_value": None,
@@ -149,7 +148,7 @@ if state.step2:
         adv_list = state.adv_candidates or []
         
         if not adv_list:
-            st.error("候補生成エラー")
+            st.error("候補生成エラー：再読み込みしてください")
         else:
             sel_idx = st.radio("選択肢から選ぶ:", range(len(adv_list)), format_func=lambda i: adv_list[i], key="r_adv")
             manual_adv = st.text_input("または、自分で入力する:", key="m_adv")
@@ -159,7 +158,6 @@ if state.step2:
                 go_back()
                 st.rerun()
             if c2.button("① 確定して次へ", key="n_adv", type="primary"):
-                # 手動入力があればそちらを優先
                 final_text = manual_adv.strip() if manual_adv.strip() else adv_list[sel_idx]
                 state.text_adv = final_text
                 
@@ -175,22 +173,28 @@ if state.step2:
         st.info(f"前提（前衛的社会問題）: {state.text_adv}")
         goal_list = state.mtplus1.get("goals", [])
         
-        sel_idx = st.radio("選択肢から選ぶ:", range(len(goal_list)), format_func=lambda i: goal_list[i], key="r_goal")
-        manual_goal = st.text_input("または、自分で入力する:", key="m_goal")
-        
-        c1, c2 = st.columns([1, 4])
-        if c1.button("戻る", key="b_goal"):
-            go_back()
-            st.rerun()
-        if c2.button("② 確定して次へ", key="n_goal", type="primary"):
-            final_text = manual_goal.strip() if manual_goal.strip() else goal_list[sel_idx]
-            state.text_goal = final_text
+        if not goal_list:
+            st.warning("候補が生成されませんでした。戻ってやり直してください。")
+            if st.button("戻る", key="b_goal_err"):
+                go_back()
+                st.rerun()
+        else:
+            sel_idx = st.radio("選択肢から選ぶ:", range(len(goal_list)), format_func=lambda i: goal_list[i], key="r_goal")
+            manual_goal = st.text_input("または、自分で入力する:", key="m_goal")
             
-            with st.spinner(f"「{final_text}」に基づく『人々の価値観』候補を生成中..."):
-                state.mtplus1["values"] = hp_session.generate_values_from_goal(final_text)
-            
-            state.s2_value = True
-            st.rerun()
+            c1, c2 = st.columns([1, 4])
+            if c1.button("戻る", key="b_goal"):
+                go_back()
+                st.rerun()
+            if c2.button("② 確定して次へ", key="n_goal", type="primary"):
+                final_text = manual_goal.strip() if manual_goal.strip() else goal_list[sel_idx]
+                state.text_goal = final_text
+                
+                with st.spinner(f"「{final_text}」に基づく『人々の価値観』候補を生成中..."):
+                    state.mtplus1["values"] = hp_session.generate_values_from_goal(final_text)
+                
+                state.s2_value = True
+                st.rerun()
 
     # --- ③ 人々の価値観 ---
     if state.s2_value and not state.s2_habit:

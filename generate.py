@@ -1,3 +1,4 @@
+# generate.py
 import json
 from concurrent.futures import ThreadPoolExecutor, Future
 from typing import Dict, List, Optional
@@ -28,7 +29,7 @@ class HPGenerationSession:
 
         self.future_candidates_adv: Optional[Future] = None
         
-        # 候補リストを保持する辞書（逐次更新）
+        # 候補リストを保持する辞書
         self.mtplus1_candidates = {
             "goals": [],
             "values": [],
@@ -36,25 +37,24 @@ class HPGenerationSession:
             "ux_future": [],
         }
 
+    # ============ Tavily Wrapper ============
     def tavily_from_nodes(self, input_id: int, input_text: str, output_id: int, time_state: int) -> str:
         return tavily_generate_answer(
             generate_question_for_tavily(HP_model[input_id], input_text, HP_model[output_id], time_state)
         )
 
-    # ============ Input Handling ============
-
+    # ============ Input Handling (Step 1) ============
     def handle_input1(self, ux_text: str):
-        #  Mt UX (Input) starts here.
         self.hp_mt_1[HP_model[5]] = ux_text 
         self.user_inputs["q1_ux"] = ux_text
-
-        # 1) UX -> Mt Art (18)
+        
+        # UX -> Art
         def job_art():
             art = self.tavily_from_nodes(5, ux_text, 18, 1)
             self.hp_mt_1[HP_model[18]] = art
             return art
         
-        # 2) UX -> Mt Business Ecosystem (17) -> Institution (6)
+        # UX -> BusinessEcosystem -> Institution
         def job_be_and_inst():
             be = self.tavily_from_nodes(5, ux_text, 17, 1)
             self.hp_mt_1[HP_model[17]] = be
@@ -68,8 +68,8 @@ class HPGenerationSession:
     def handle_input2(self, product_text: str):
         self.hp_mt_1[HP_model[14]] = product_text
         self.user_inputs["q2_product"] = product_text
-
-        # Product -> Tech (Mt)
+        
+        # Product -> Tech
         def job_tech_mt():
             tech = self.tavily_from_nodes(14, product_text, 4, 1)
             self.hp_mt_1[HP_model[4]] = tech
@@ -81,24 +81,20 @@ class HPGenerationSession:
         self.user_inputs["q3_meaning"] = mean_text
 
     def start_from_values_and_trigger_future(self, values_text: str):
-        """
-        Q4入力後に呼ばれる。
-        1. Mt/Mt-1 の残りを生成
-        2. Mt+1 の候補（前衛的社会問題）を生成
-        """
         self.hp_mt_1[HP_model[2]] = values_text
         self.user_inputs["q4_value"] = values_text
-
+        
         # Background: Mt & Past Chain
         self.all_futures.append(self.executor.submit(self.job_mt_and_past_from_values, values_text))
 
-        # Future: Generate Candidates for Mt+1 Adv Problem
-        #  ユーザー入力(Q1, Q4)を強く反映させるために再設計
+        # Future: Adv Candidates
         self.trigger_adv_candidates_generation()
 
     def trigger_adv_candidates_generation(self):
         def job_candidates():
+            # Wait for Art if possible, or get empty string
             art_text = self.hp_mt_1.get(HP_model[18], "")
+            
             context = f"""
 ユーザーの現在の行動(UX): {self.user_inputs['q1_ux']}
 ユーザーの価値観: {self.user_inputs['q4_value']}
@@ -108,30 +104,34 @@ class HPGenerationSession:
             candidates = list_up_gpt(
                 input_node="現在のアートおよびユーザー体験",
                 input_content=f"{art_text} / {self.user_inputs['q1_ux']}",
-                output_node=HP_model[1],
+                output_node=HP_model[1], # Mt+1 前衛的社会問題
                 context=context
             )
             return candidates
+
         self.future_candidates_adv = self.executor.submit(job_candidates)
         self.all_futures.append(self.future_candidates_adv)
 
-    # ============ Logic: Mt / Mt-1 Chain ============
-
+    # ============ Background Logic: Mt / Mt-1 ============
     def job_mt_and_past_from_values(self, values_text: str):
+        # Mt Loop
         self.hp_mt_1[HP_model[9]] = self.tavily_from_nodes(2, values_text, 9, 1)
         self.hp_mt_1[HP_model[11]] = self.tavily_from_nodes(2, values_text, 11, 1)
         self.hp_mt_1[HP_model[3]] = self.tavily_from_nodes(2, values_text, 3, 1)
         self.hp_mt_1[HP_model[15]] = self.tavily_from_nodes(2, values_text, 15, 1)
+        
+        # Mt SocProblem -> Community -> AdvProblem (Mt)
         self.hp_mt_1[HP_model[8]] = self.tavily_from_nodes(3, self.hp_mt_1[HP_model[3]], 8, 1)
         self.hp_mt_1[HP_model[1]] = self.tavily_from_nodes(8, self.hp_mt_1[HP_model[8]], 1, 1)
 
+        # Mt-1 Generation
         self.hp_mt_0[HP_model[16]] = self.tavily_from_nodes(1, self.hp_mt_1[HP_model[1]], 16, 0)
         self.hp_mt_0[HP_model[18]] = self.tavily_from_nodes(1, self.hp_mt_1[HP_model[1]], 18, 0)
         self.hp_mt_0[HP_model[4]] = self.tavily_from_nodes(16, self.hp_mt_0[HP_model[16]], 4, 0)
         self.hp_mt_0[HP_model[5]] = self.tavily_from_nodes(18, self.hp_mt_0[HP_model[18]], 5, 0)
         self.hp_mt_0[HP_model[6]] = self.tavily_from_nodes(3, self.hp_mt_1[HP_model[3]], 6, 0)
 
-    # ============ Mt+1 Interaction ============
+    # ============ Mt+1 Step-by-Step Logic (Step 2) ============
 
     def get_future_adv_candidates(self) -> List[str]:
         if self.future_candidates_adv:
@@ -145,7 +145,7 @@ class HPGenerationSession:
         # Mt+1 コミュニティ化 (自動生成)
         self.hp_mt_2[HP_model[8]] = single_gpt(
             HP_model[1], adv_text, HP_model[8],
-            context=f"過去からの文脈: {self.user_inputs['q4_value']}"
+            context=f"過去からの文脈（ユーザー価値観）: {self.user_inputs['q4_value']}"
         )
         
         # 社会の目標 (候補生成)
@@ -159,7 +159,8 @@ class HPGenerationSession:
     def generate_values_from_goal(self, goal_text: str) -> List[str]:
         self.hp_mt_2[HP_model[3]] = goal_text
         self.mtplus1_candidates["values"] = list_up_gpt(
-            HP_model[3], goal_text, HP_model[2]
+            HP_model[3], goal_text, HP_model[2],
+            context="その社会目標を実現するために必要な価値観"
         )
         return self.mtplus1_candidates["values"]
 
@@ -167,7 +168,8 @@ class HPGenerationSession:
     def generate_habits_from_value(self, value_text: str) -> List[str]:
         self.hp_mt_2[HP_model[2]] = value_text
         self.mtplus1_candidates["habits"] = list_up_gpt(
-            HP_model[2], value_text, HP_model[15]
+            HP_model[2], value_text, HP_model[15],
+            context="その価値観が普及した社会での日常的な習慣"
         )
         return self.mtplus1_candidates["habits"]
 
@@ -175,7 +177,8 @@ class HPGenerationSession:
     def generate_ux_from_habit(self, habit_text: str) -> List[str]:
         self.hp_mt_2[HP_model[15]] = habit_text
         self.mtplus1_candidates["ux_future"] = list_up_gpt(
-            HP_model[15], habit_text, HP_model[5]
+            HP_model[15], habit_text, HP_model[5],
+            context="その習慣が行われる物理的・デジタルな空間や体験"
         )
         return self.mtplus1_candidates["ux_future"]
 
