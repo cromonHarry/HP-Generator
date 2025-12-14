@@ -7,7 +7,7 @@ def get_openai_client():
 
 def get_ai_response(user_input: str):
     client = get_openai_client()
-    prompt = f"あなたは親切なアシスタントです。以下の質問に日本語で丁寧に答えてください:\n{user_input}"
+    prompt = f"あなたは親切なアシスタントです。ユーザーは「アーキオロジカル・プロトタイピング（HP）」モデルについて相談します。簡潔な言葉でユーザーにアドバイスしてください。以下の質問に日本語で丁寧に答えてください:\n{user_input}"
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[{"role": "user", "content": prompt}],
