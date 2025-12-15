@@ -41,9 +41,9 @@ ARROW_MAP = [
 
 def transform_data_for_vis(hp_json: dict) -> list:
     stages = [
-        {"key": "hp_mt_0", "stage_idx": 0}, # Mt-1
-        {"key": "hp_mt_1", "stage_idx": 1}, # Mt
-        {"key": "hp_mt_2", "stage_idx": 2}, # Mt+1
+        {"key": "hp_mt_0", "stage_idx": 0}, # Mt-1 (過去) - Up
+        {"key": "hp_mt_1", "stage_idx": 1}, # Mt (現在) - Down (反転)
+        {"key": "hp_mt_2", "stage_idx": 2}, # Mt+1 (未来) - Up
     ]
     
     vis_data = []
@@ -192,16 +192,27 @@ def render_hp_visualization(hp_json: dict):
             
             // 基準X (世代ごとにシフト)
             const baseX = 50 + (stageIdx * W);
+
+            // 【変更点】
+            // stageIdx が 1 (真ん中、Mt) の場合は -1、それ以外(0, 2)は 1
+            // これにより、真ん中の世代だけ上下が反転し、波打つような配置になる
+            const invert = (stageIdx === 1) ? -1 : 1;
             
             // ID別配置:
             // 5:UX(左端), 1:前衛(左上), 6:制度(左下), 3:社会(中央), 2:価値(右上), 4:技術(右下)
             switch(nodeId) {{
                 case 5: return {{ x: baseX,          y: H_CENTER }};
-                case 1: return {{ x: baseX + 200,    y: H_CENTER - V_GAP }};
-                case 6: return {{ x: baseX + 200,    y: H_CENTER + V_GAP }};
+                // 通常は上(-)、反転時は下(+)
+                case 1: return {{ x: baseX + 200,    y: H_CENTER - (V_GAP * invert) }};
+                // 通常は下(+)、反転時は上(-)
+                case 6: return {{ x: baseX + 200,    y: H_CENTER + (V_GAP * invert) }};
+                
                 case 3: return {{ x: baseX + 400,    y: H_CENTER }};
-                case 2: return {{ x: baseX + 600,    y: H_CENTER - V_GAP }};
-                case 4: return {{ x: baseX + 600,    y: H_CENTER + V_GAP }};
+                
+                // 通常は上(-)、反転時は下(+)
+                case 2: return {{ x: baseX + 600,    y: H_CENTER - (V_GAP * invert) }};
+                // 通常は下(+)、反転時は上(-)
+                case 4: return {{ x: baseX + 600,    y: H_CENTER + (V_GAP * invert) }};
                 default: return {{ x: 0, y: 0 }};
             }}
         }}
@@ -211,7 +222,7 @@ def render_hp_visualization(hp_json: dict):
             nodeEls = {{}};
             
             // 1. 世代ラベル
-            ['Mt-1: 過去', 'Mt: 現在', 'Mt+1: 未来'].forEach((txt, i) => {{
+            ['Mt-1: 過去', 'Mt: 現在 (反転)', 'Mt+1: 未来'].forEach((txt, i) => {{
                 const d = document.createElement('div');
                 d.className = 'stage-label';
                 d.innerText = txt;
@@ -243,7 +254,7 @@ def render_hp_visualization(hp_json: dict):
                 }});
                 
                 // 次の世代へつなぐための「右端のEnd UX」ポイントを作成
-                // これは次の世代のStart UXと同じ座標になる (x=baseX+800)
+                // これは次の世代のStart UXと同じ座標になる (x=baseX+800, y=300)
                 const endUxX = (50 + (d.stage * 800)) + 800;
                 const endUxY = 300;
                 
@@ -256,7 +267,6 @@ def render_hp_visualization(hp_json: dict):
                 // 描画はしないが、矢印のターゲットとしてDOMに追加しておく
                 container.appendChild(dummy);
                 
-                // ↓ ここが修正箇所。f-string内で波括弧をエスケープ
                 nodeEls[`s${{d.stage}}-endUX`] = dummy;
             }});
 
