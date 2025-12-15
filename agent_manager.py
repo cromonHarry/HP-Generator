@@ -28,24 +28,31 @@ class AgentManager:
         return self.agents
 
     def _agent_think(self, agent, element_type, context_str, history):
-        """单个 Agent 生成提案"""
+        """单个 Agent 生成提案 - 已改良Prompt以去除废话"""
         history_text = "\n".join([f"- {h}" for h in history]) if history else "なし"
+        
+        # 改良后的 Prompt：增加“禁止事项”和“出力例”
         prompt = f"""
-あなたは{agent['name']}です。専門分野は{agent['expertise']}、性格は{agent['personality']}です。
-{agent['perspective']}の視点から分析を行ってください。
+あなたは{agent['name']}です（専門：{agent['expertise']}）。
+{agent['perspective']}の視点で、未来（Mt+1）の要素「{element_type}」を具体的に予測してください。
 
-【タスク】
-未来ステージ（Mt+1）におけるHPモデルの要素「{element_type}」の内容を生成してください。
-
-## 文脈（過去・現在および生成済みの未来要素）:
+## 文脈
 {context_str}
 
-## あなたの過去の提案（重複を避けるため）:
+## 過去の提案（重複回避）
 {history_text}
 
-この要素について、未来におけるユニークで革新的なアイデアを提案してください。
-【出力形式】
-JSONではなく、テキスト（日本語）のみで出力してください。100文字〜200文字程度で簡潔に。
+【重要：出力ルール】
+1. **前置きは一切禁止**です。「未来の社会問題としては…」「…と考えられます」などの導入句は書かないでください。
+2. HPモデルの定義説明（「前衛的社会問題とは…」）も不要です。
+3. 予測される**「現象」「状態」「光景」そのもの**を、断定的に、かつ具体的に書き出してください。
+4. 読者がその未来の情景を鮮明にイメージできるようなテキストにしてください。
+
+【出力例】
+（悪い例）：未来の前衛的社会問題としては、AIによる支配が考えられます。これは…
+（良い例）：自律型AIが司法判断の9割を代行するようになり、人間の感情が法廷から排除されたことで生じる「計算された非人道的な正義」。
+
+あなたの予測内容（テキストのみ、100文字〜150文字程度）を出力してください：
 """
         response = self.client.chat.completions.create(
             model="gpt-4o",
