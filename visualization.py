@@ -1,4 +1,3 @@
-# visualization.py
 import streamlit as st
 import json
 import streamlit.components.v1 as components
@@ -193,26 +192,36 @@ def render_hp_visualization(hp_json: dict):
             // 基準X (世代ごとにシフト)
             const baseX = 50 + (stageIdx * W);
 
-            // 【変更点】
-            // stageIdx が 1 (真ん中、Mt) の場合は -1、それ以外(0, 2)は 1
-            // これにより、真ん中の世代だけ上下が反転し、波打つような配置になる
+            // ★【反転ロジック】: Stage 1 (Mt) の場合のみ上下を入れ替える
+            // invert = -1 (反転: 上が下に、下が上に), 1 (通常)
             const invert = (stageIdx === 1) ? -1 : 1;
             
             // ID別配置:
-            // 5:UX(左端), 1:前衛(左上), 6:制度(左下), 3:社会(中央), 2:価値(右上), 4:技術(右下)
+            // 5:UX(左端), 3:社会(中央) -> Yはセンター固定
+            // 1:前衛, 2:価値 -> 通常は上(Y小)、反転時は下(Y大)
+            // 6:制度, 4:技術 -> 通常は下(Y大)、反転時は上(Y小)
+            
             switch(nodeId) {{
                 case 5: return {{ x: baseX,          y: H_CENTER }};
-                // 通常は上(-)、反転時は下(+)
+                
+                // 1: 前衛的社会問題
+                // 通常: 300 - 200 = 100 (上)
+                // 反転: 300 - (-200) = 500 (下)
                 case 1: return {{ x: baseX + 200,    y: H_CENTER - (V_GAP * invert) }};
-                // 通常は下(+)、反転時は上(-)
+                
+                // 6: 制度
+                // 通常: 300 + 200 = 500 (下)
+                // 反転: 300 + (-200) = 100 (上)
                 case 6: return {{ x: baseX + 200,    y: H_CENTER + (V_GAP * invert) }};
                 
                 case 3: return {{ x: baseX + 400,    y: H_CENTER }};
                 
-                // 通常は上(-)、反転時は下(+)
+                // 2: 価値観 (同 1)
                 case 2: return {{ x: baseX + 600,    y: H_CENTER - (V_GAP * invert) }};
-                // 通常は下(+)、反転時は上(-)
+                
+                // 4: 技術 (同 6)
                 case 4: return {{ x: baseX + 600,    y: H_CENTER + (V_GAP * invert) }};
+                
                 default: return {{ x: 0, y: 0 }};
             }}
         }}
@@ -222,7 +231,7 @@ def render_hp_visualization(hp_json: dict):
             nodeEls = {{}};
             
             // 1. 世代ラベル
-            ['Mt-1: 過去', 'Mt: 現在 (反転)', 'Mt+1: 未来'].forEach((txt, i) => {{
+            ['Mt-1: 過去', 'Mt: 現在 (上下反転)', 'Mt+1: 未来'].forEach((txt, i) => {{
                 const d = document.createElement('div');
                 d.className = 'stage-label';
                 d.innerText = txt;
