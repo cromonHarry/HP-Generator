@@ -5,11 +5,12 @@ from typing import Dict, List, Optional
 
 from prompt import (
     HP_model,
-    list_up_gpt,
     single_gpt,
+    list_up_gpt,
     generate_question_for_tavily,
     tavily_generate_answer,
 )
+from agent_manager import AgentManager  # Import Multi-Agent Manager
 
 class HPGenerationSession:
     def __init__(self, max_workers: int = 8):
@@ -35,6 +36,9 @@ class HPGenerationSession:
             "habits": [],
             "ux_future": [],
         }
+        
+        # New: Agent Manager for Step 2
+        self.agent_manager = AgentManager()
 
     # ============ Utils ============
     def tavily_from_nodes(self, input_id: int, input_text: str, output_id: int, time_state: int) -> str:
@@ -46,6 +50,12 @@ class HPGenerationSession:
     def simple_fill(self, input_id: int, input_text: str, output_id: int) -> str:
         # GPTのみで高速に埋める（Tavilyなし）
         return single_gpt(HP_model[input_id], input_text, HP_model[output_id])
+    
+    # NEW: Wrapper to call AgentManager.run_multi_agent_generation
+    def run_multi_agent(self, element_type, element_desc, topic, context):
+        # 将 context 整合进 full_context_str
+        full_context = f"現在の状況: {self.hp_mt_1}\nユーザー入力: {self.user_inputs}\n具体的な文脈: {context}"
+        return self.agent_manager.run_multi_agent_generation(element_type, element_desc, topic, full_context)
 
     # ============ Step 1: User Input Handling ============
 
@@ -105,10 +115,14 @@ class HPGenerationSession:
 現在の価値観: {self.user_inputs['q4_value']}
 この状況が行き着く先、あるいはこれに対する反動として生まれる未来の問題を予測してください。
 """
-            candidates = list_up_gpt(
-                input_node="現在のアートおよびユーザー体験",
-                input_content=f"{art_text} / {self.user_inputs['q1_ux']}",
-                output_node=HP_model[1], # Mt+1 前衛的社会問題
+            # 【変更点】 Multi-Agentを使用
+            # 先に Agent を生成（トピック：現在の状況からの未来変化）
+            self.agent_manager.generate_agents(f"現在の状況（{self.user_inputs['q1_ux']}）と価値観（{self.user_inputs['q4_value']}）からの未来的進化")
+            
+            candidates = self.run_multi_agent(
+                element_type=HP_model[1], # 前衛的社会問題
+                element_desc="現在のUX/アートから生じる未来の前衛的な社会問題",
+                topic=f"{art_text} からの進化",
                 context=context
             )
             return candidates
@@ -147,9 +161,6 @@ class HPGenerationSession:
 
 
         # 2. Mt-1 (過去) の生成
-        # ロジック: Mtの開始点(パラダイム16, アート18) は、Mt-1の終了点(UX)から来る
-        # しかしモデル上は、Mtの前衛的社会問題(1)が、Mt-1のパラダイム(16)/アート(18)とリンクしやすい
-        # ここでは「Mtの前衛的社会問題(1)」の原因となった「過去のパラダイム(16)」を探る
         
         mt_adv = self.hp_mt_1.get(HP_model[1], "")
         
@@ -163,7 +174,6 @@ class HPGenerationSession:
         self.hp_mt_0[HP_model[18]] = self.simple_fill(1, mt_adv, 18)
         
         # Mt-1(18) -> Mt-1(5) UX (【重要】過去のUX空間)
-        # これがMtの始点となる
         self.hp_mt_0[HP_model[5]] = self.tavily_from_nodes(18, self.hp_mt_0[HP_model[18]], 5, 0)
 
         # Mt-1の残りをUX(5)から逆算的に埋める
@@ -181,14 +191,14 @@ class HPGenerationSession:
         self.hp_mt_0[HP_model[2]] = self.simple_fill(11, self.hp_mt_0[HP_model[11]], 2)
         
         # 残りの埋め合わせ
-        self.hp_mt_0[HP_model[1]] = self.simple_fill(16, self.hp_mt_0[HP_model[16]], 1) # パラダイムから前衛へ
+        self.hp_mt_0[HP_model[1]] = self.simple_fill(16, self.hp_mt_0[HP_model[16]], 1) 
         self.hp_mt_0[HP_model[8]] = self.simple_fill(3, self.hp_mt_0[HP_model[3]], 8)
         self.hp_mt_0[HP_model[9]] = self.simple_fill(1, self.hp_mt_0[HP_model[1]], 9)
         self.hp_mt_0[HP_model[10]] = self.simple_fill(6, self.hp_mt_0[HP_model[6]], 10)
         self.hp_mt_0[HP_model[12]] = self.simple_fill(3, self.hp_mt_0[HP_model[3]], 12)
         self.hp_mt_0[HP_model[15]] = self.simple_fill(2, self.hp_mt_0[HP_model[2]], 15)
 
-    # ============ Step 2: Mt+1 Future Generation ============
+    # ============ Step 2: Mt+1 Future Generation (With Multi-Agent) ============
 
     def get_future_adv_candidates(self) -> List[str]:
         if self.future_candidates_adv:
@@ -202,13 +212,15 @@ class HPGenerationSession:
             HP_model[1], adv_text, HP_model[8],
             context=f"過去からの文脈: {self.user_inputs['q4_value']}"
         )
-        # Mt+1 文化芸術(9) も埋めておく
+        # Mt+1 文化芸術(9)
         self.hp_mt_2[HP_model[9]] = self.simple_fill(1, adv_text, 9)
 
-        # 社会の目標候補
-        self.mtplus1_candidates["goals"] = list_up_gpt(
-            HP_model[8], self.hp_mt_2[HP_model[8]], HP_model[3], 
-            context="ユーザーが望む、あるいは恐れる未来の社会目標として"
+        # 社会の目標候補 (Multi-Agent)
+        self.mtplus1_candidates["goals"] = self.run_multi_agent(
+            element_type=HP_model[3], # 社会問題(Goal/Target)
+            element_desc="コミュニティや前衛的問題によって駆動される未来の社会目標",
+            topic=f"「{adv_text}」に対する目標",
+            context=f"コミュニティの状況: {self.hp_mt_2[HP_model[8]]}"
         )
         return self.mtplus1_candidates["goals"]
 
@@ -218,9 +230,12 @@ class HPGenerationSession:
         self.hp_mt_2[HP_model[12]] = self.simple_fill(3, goal_text, 12)
         self.hp_mt_2[HP_model[11]] = self.simple_fill(3, goal_text, 11)
 
-        self.mtplus1_candidates["values"] = list_up_gpt(
-            HP_model[3], goal_text, HP_model[2],
-            context="その社会目標を実現するために必要な価値観"
+        # 価値観 (Multi-Agent)
+        self.mtplus1_candidates["values"] = self.run_multi_agent(
+            element_type=HP_model[2], 
+            element_desc="社会目標を解決するために人々が持つ未来の価値観",
+            topic=f"「{goal_text}」のための価値観",
+            context="目標達成に必要な価値観。"
         )
         return self.mtplus1_candidates["values"]
 
@@ -229,9 +244,12 @@ class HPGenerationSession:
         # Mt+1 意味付け(13)
         self.hp_mt_2[HP_model[13]] = self.simple_fill(2, value_text, 13)
 
-        self.mtplus1_candidates["habits"] = list_up_gpt(
-            HP_model[2], value_text, HP_model[15],
-            context="その価値観が普及した社会での日常的な習慣"
+        # 習慣 (Multi-Agent)
+        self.mtplus1_candidates["habits"] = self.run_multi_agent(
+            element_type=HP_model[15],
+            element_desc="未来の価値観によって形成される日常的な習慣",
+            topic=f"「{value_text}」に基づく習慣",
+            context="制度化される日常の習慣。"
         )
         return self.mtplus1_candidates["habits"]
 
@@ -243,9 +261,12 @@ class HPGenerationSession:
         self.hp_mt_2[HP_model[10]] = self.simple_fill(6, self.hp_mt_2[HP_model[6]], 10)
         self.hp_mt_2[HP_model[7]] = self.simple_fill(6, self.hp_mt_2[HP_model[6]], 7)
 
-        self.mtplus1_candidates["ux_future"] = list_up_gpt(
-            HP_model[15], habit_text, HP_model[5],
-            context="その習慣が行われる物理的・デジタルな空間や体験"
+        # UX (Multi-Agent)
+        self.mtplus1_candidates["ux_future"] = self.run_multi_agent(
+            element_type=HP_model[5],
+            element_desc="未来のUXと空間",
+            topic=f"習慣「{habit_text}」のためのUX",
+            context="習慣が行われる物理的/デジタル空間。"
         )
         return self.mtplus1_candidates["ux_future"]
 
