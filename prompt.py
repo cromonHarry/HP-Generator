@@ -107,7 +107,7 @@ def generate_question_for_tavily(input_node: str, input_content: str, output_nod
             {"role": "user", "content": prompt}
         ]
     )
-    return response.choices[0].message.content
+    return response.choices[0].message.content + "\n**50文字以内**で簡潔に回答してください。"
 
 def tavily_generate_answer(question: str) -> str:
     try:
