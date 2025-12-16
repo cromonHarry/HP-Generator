@@ -139,7 +139,7 @@ if state.step2:
 
     # --- ① 前衛的社会問題 ---
     if state.s2_adv and not state.s2_goal:
-        st.subheader("① 前衛的社会問題 (Agent Proposals)")
+        st.subheader("① 前衛的社会問題")
         adv_list = state.adv_candidates or []
         
         if not adv_list:
@@ -163,7 +163,7 @@ if state.step2:
 
     # --- ② 社会の目標 ---
     if state.s2_goal and not state.s2_value:
-        st.subheader("② 社会の目標 (Agent Proposals)")
+        st.subheader("② 社会の目標")
         goal_list = state.mtplus1.get("goals", [])
         
         sel_idx = st.radio("エージェントの提案から選択:", range(len(goal_list)), format_func=lambda i: f"提案 {i+1}: {goal_list[i]}", key="r_goal")
@@ -184,7 +184,7 @@ if state.step2:
 
     # --- ④ 人々の価値観 ---
     if state.s2_value and not state.s2_habit:
-        st.subheader("③ 人々の価値観 (Agent Proposals)")
+        st.subheader("③ 人々の価値観")
         val_list = state.mtplus1.get("values", [])
         
         sel_idx = st.radio("エージェントの提案から選択:", range(len(val_list)), format_func=lambda i: f"提案 {i+1}: {val_list[i]}", key="r_val")
@@ -205,7 +205,7 @@ if state.step2:
 
     # --- ④ 慣習化 ---
     if state.s2_habit and not state.s2_ux:
-        st.subheader("④ 慣習化 (Agent Proposals)")
+        st.subheader("④ 慣習化")
         hab_list = state.mtplus1.get("habits", [])
         
         sel_idx = st.radio("エージェントの提案から選択:", range(len(hab_list)), format_func=lambda i: f"提案 {i+1}: {hab_list[i]}", key="r_hab")
@@ -226,7 +226,7 @@ if state.step2:
 
     # --- ⑤ UX ---
     if state.s2_ux and not state.step4:
-        st.subheader("⑤ 日常の空間とユーザー体験 (Agent Proposals)")
+        st.subheader("⑤ 日常の空間とユーザー体験")
         ux_list = state.mtplus1.get("ux_future", [])
         
         sel_idx = st.radio("エージェントの提案から選択:", range(len(ux_list)), format_func=lambda i: f"提案 {i+1}: {ux_list[i]}", key="r_ux")
