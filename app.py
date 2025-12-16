@@ -7,6 +7,10 @@ from prompt import list_up_gpt
 from visualization import render_hp_visualization
 from chat_ui import render_chat_ui # 聊天界面
 
+# === 新增模块导入 ===
+from agent_manager import AgentManager
+from story_generator import StoryGenerator
+
 # ===== 页面设置 =====
 st.set_page_config(page_title="HPモデル SFプロット生成ツール",
                     page_icon="🛰️", layout="wide") # 使用 wide 布局
@@ -18,7 +22,6 @@ st.markdown("""
 <style>
 /* 1. 宇宙背景とダークテーマを適用 */
 .stApp {
-    /* **请替换成您的宇宙图片URL**。例如：'https://example.com/space.jpg' */
     background: 
         url('https://images.unsplash.com/photo-1502134249126-9f3755a50d78?fit=crop&w=1920&q=80') 
         center center / cover no-repeat fixed;
@@ -93,9 +96,6 @@ textarea, input[type="text"], [data-testid="stTextInput"], [data-testid="stTexta
 [data-testid="stVerticalBlock"] > div:nth-child(1) {
     background-color: transparent; /* 确保标题背景透明 */
 }
-/* ❗ 移除所有针对右侧聊天栏的 margin/padding CSS 调整 */
-/* 而是使用 HTML <div> 空间块来调整位置 */
-
 </style>
 """, unsafe_allow_html=True)
 
@@ -128,10 +128,17 @@ def init_state():
         "text_ux": None,
         "show_chat": False, # 聊天界面切换
         "chat_history": [], # 聊天记录
-        }
+    }
     for k, v in defaults.items():
         if k not in st.session_state:
             st.session_state[k] = v
+
+    # === Multi-Agent Initializations ===
+    if "agent_manager" not in st.session_state:
+        st.session_state.agent_manager = AgentManager()
+    
+    if "story_generator" not in st.session_state:
+        st.session_state.story_generator = StoryGenerator()
 
 init_state()
 state = st.session_state
@@ -158,6 +165,16 @@ def go_back():
         state.s2_adv = False
         state.text_adv = None
 
+def get_context_for_agents():
+    """获取当前已有的 HP 模型 JSON 字符串，供 Agent 使用"""
+    # 组合 Mt-1, Mt 和目前已有的 Mt+1
+    temp_json = hp_session.to_dict()
+    return json.dumps(temp_json, ensure_ascii=False)
+
+def get_topic_str():
+    """生成用户输入的简要主题"""
+    return f"現在のUX: {state.user_inputs['q1_ux']} / 価値観: {state.user_inputs['q4_value']}"
+
 # ===============================
 # 封装主界面 (Step 1)
 # ===============================
@@ -177,7 +194,6 @@ def render_main_ui():
 
     if state.show_q2:
         st.subheader("Q2（Mt：製品・サービス）")
-        # 已修改 height >= 68
         q2 = st.text_area("その一連の体験を成立させるために重要な製品やサービスを挙げてください。", key="input_q2", height=68)
         if st.button("Q2 を送信", key="btn_q2"):
             if not q2.strip():
@@ -189,7 +205,6 @@ def render_main_ui():
 
     if state.show_q3:
         st.subheader("Q3（Mt：意味付け）")
-        # 已修改 height >= 68
         q3 = st.text_area("あなたは、何のためにその製品やサービスを使用していますか？", key="input_q3", height=68)
         if st.button("Q3 を送信", key="btn_q3"):
             if not q3.strip():
@@ -201,16 +216,30 @@ def render_main_ui():
 
     if state.show_q4 and not state.step2:
         st.subheader("Q4（Mt：人々の価値観）")
-        # 已修改 height >= 68
         q4 = st.text_area("そのような体験を行うあなたはどんな自分でありたいですか？", key="input_q4", height=68)
         if st.button("Q4 を送信して Step2 開始", key="btn_q4", type="primary"):
             if not q4.strip():
                 st.warning("Q4に回答してください。")
             else:
-                with st.spinner("Mt・Mt-1・Mt+1 の初期情報を生成中…"):
+                # 1. Start filling Mt/Mt-1 (Standard Logic)
+                with st.spinner("Mt・Mt-1 の詳細情報を検索・生成中…"):
                     hp_session.start_from_values_and_trigger_future(q4)
-                    hp_session.wait_all()
-                    state.adv_candidates = hp_session.get_future_adv_candidates()
+                    hp_session.wait_all() # 确保过去和现在的节点填满
+                
+                # 2. Use Multi-Agent for the first future node (Adv Issue)
+                st.info("🤖 3人の専門家エージェントを召喚し、未来の「前衛的社会問題」を議論中... (時間がかかります)")
+                with st.spinner("Agents thinking (Iterative Generation)..."):
+                    topic = get_topic_str()
+                    context = get_context_for_agents()
+                    
+                    # Call Agent Manager
+                    state.adv_candidates = state.agent_manager.run_multi_agent_generation(
+                        element_type="前衛的社会問題",
+                        element_desc="技術やパラダイムの変化、あるいは反動として生まれる未来の問題",
+                        topic=topic,
+                        full_context_str=context
+                    )
+                
                 state.step2 = True
                 state.s2_adv = True
                 st.rerun()
@@ -219,25 +248,20 @@ def render_main_ui():
 # 页面主分栏逻辑
 # ============================================================
 
-# 70% 留给主内容，30% 留给聊天框
 main_col, chat_col = st.columns([7, 3])
 
-# --- 左栏：主应用界面 (页头和 Step 1-4) ---
+# --- 左栏：主应用界面 ---
 with main_col:
-    # 重新显示页头 (保留动画)
-    st.markdown('<div class="main-title fade-in">HPモデル × GPT × Tavily によるSFプロット生成ツール</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-title fade-in">HPモデル × Multi-Agent SFプロット生成ツール</div>', unsafe_allow_html=True)
     st.markdown('<div class="sub-title fade-in" style="animation-delay: 0.5s;">あなたの経験をもとに三世代HPモデルとSF物語ストーリー概要を共创します。</div>', unsafe_allow_html=True)
 
-    # 渲染 Step 1
     render_main_ui()
 
-    # 渲染 Step 2 ~ Step 4 的内容
-
     # ---------------------------------------------
-    #   🟩 ステップ2：未来社会 5つの選択 (逐次生成 & 手動入力)
+    #   🟩 ステップ2：未来社会 5つの選択 (Multi-Agent)
     # ---------------------------------------------
     if state.step2:
-        st.header("ステップ 2：未来社会を構成する5つの選択", divider="grey")
+        st.header("ステップ 2：未来社会を構成する5つの選択 (Multi-Agent Mode)", divider="grey")
 
         # --- ① 前衛的社会問題 ---
         if state.s2_adv and not state.s2_goal:
@@ -247,7 +271,7 @@ with main_col:
             if not adv_list:
                 st.error("候補生成エラー：再読み込みしてください")
             else:
-                sel_idx = st.radio("選択肢から選ぶ:", range(len(adv_list)), format_func=lambda i: adv_list[i], key="r_adv")
+                sel_idx = st.radio("エージェントの提案から選ぶ:", range(len(adv_list)), format_func=lambda i: adv_list[i], key="r_adv")
                 manual_adv = st.text_input("または、自分で入力する:", key="m_adv")
                 
                 c1, c2 = st.columns([1, 4])
@@ -258,9 +282,19 @@ with main_col:
                     final_text = manual_adv.strip() if manual_adv.strip() else adv_list[sel_idx]
                     state.text_adv = final_text
                     
+                    # 1. Update HP Session State (uses old GPT-4o-mini logic for filling, but we ignore its return candidates)
+                    with st.spinner("HPモデル更新中..."):
+                         _ = hp_session.generate_goals_from_adv(final_text)
                     
-                    with st.spinner(f"「{final_text}」に基づく『社会の目標』候補を生成中..."):
-                        state.mtplus1["goals"] = hp_session.generate_goals_from_adv(final_text)
+                    # 2. Multi-Agent Generation for NEXT step
+                    st.info("🤖 エージェントが次の「社会の目標」について議論中...")
+                    with st.spinner("Agents thinking..."):
+                        state.mtplus1["goals"] = state.agent_manager.run_multi_agent_generation(
+                            element_type="社会の目標",
+                            element_desc="前衛的社会問題を受けて、社会が目指す（あるいは恐れる）未来の目標",
+                            topic=get_topic_str(),
+                            full_context_str=get_context_for_agents()
+                        )
                     
                     state.s2_goal = True
                     st.rerun()
@@ -273,11 +307,8 @@ with main_col:
             
             if not goal_list:
                 st.warning("候補が生成されませんでした。戻ってやり直してください。")
-                if st.button("戻る", key="b_goal_err"):
-                    go_back()
-                    st.rerun()
             else:
-                sel_idx = st.radio("選択肢から選ぶ:", range(len(goal_list)), format_func=lambda i: goal_list[i], key="r_goal")
+                sel_idx = st.radio("エージェントの提案から選ぶ:", range(len(goal_list)), format_func=lambda i: goal_list[i], key="r_goal")
                 manual_goal = st.text_input("または、自分で入力する:", key="m_goal")
                 
                 c1, c2 = st.columns([1, 4])
@@ -288,8 +319,17 @@ with main_col:
                     final_text = manual_goal.strip() if manual_goal.strip() else goal_list[sel_idx]
                     state.text_goal = final_text
                     
-                    with st.spinner(f"「{final_text}」に基づく『人々の価値観』候補を生成中..."):
-                        state.mtplus1["values"] = hp_session.generate_values_from_goal(final_text)
+                    with st.spinner("HPモデル更新中..."):
+                         _ = hp_session.generate_values_from_goal(final_text)
+
+                    st.info("🤖 エージェントが次の「人々の価値観」について議論中...")
+                    with st.spinner("Agents thinking..."):
+                        state.mtplus1["values"] = state.agent_manager.run_multi_agent_generation(
+                            element_type="人々の価値観",
+                            element_desc="その社会目標を実現するために必要な、人々の内面的な価値観",
+                            topic=get_topic_str(),
+                            full_context_str=get_context_for_agents()
+                        )
                     
                     state.s2_value = True
                     st.rerun()
@@ -300,7 +340,7 @@ with main_col:
             st.info(f"前提（社会の目標）: {state.text_goal}")
             val_list = state.mtplus1.get("values", [])
             
-            sel_idx = st.radio("選択肢から選ぶ:", range(len(val_list)), format_func=lambda i: val_list[i], key="r_val")
+            sel_idx = st.radio("エージェントの提案から選ぶ:", range(len(val_list)), format_func=lambda i: val_list[i], key="r_val")
             manual_val = st.text_input("または、自分で入力する:", key="m_val")
             
             c1, c2 = st.columns([1, 4])
@@ -311,11 +351,19 @@ with main_col:
                 final_text = manual_val.strip() if manual_val.strip() else val_list[sel_idx]
                 state.text_value = final_text
 
+                with st.spinner("HPモデル更新中..."):
+                     _ = hp_session.generate_habits_from_value(final_text)
+
+                st.info("🤖 エージェントが次の「習慣化」について議論中...")
+                with st.spinner("Agents thinking..."):
+                    state.mtplus1["habits"] = state.agent_manager.run_multi_agent_generation(
+                        element_type="習慣化",
+                        element_desc="その価値観が普及した社会での日常的な習慣・行動様式",
+                        topic=get_topic_str(),
+                        full_context_str=get_context_for_agents()
+                    )
                 
-                with st.spinner(f"「{final_text}」に基づく『慣習化』候補を生成中..."):
-                    state.mtplus1["habits"] = hp_session.generate_habits_from_value(final_text)
-                
-                state.s2_habit = True # 修正：这里应设置 s2_habit 为 True
+                state.s2_habit = True
                 st.rerun()
 
         # --- ④ 慣習化 ---
@@ -324,7 +372,7 @@ with main_col:
             st.info(f"前提（人々の価値観）: {state.text_value}")
             hab_list = state.mtplus1.get("habits", [])
             
-            sel_idx = st.radio("選択肢から選ぶ:", range(len(hab_list)), format_func=lambda i: hab_list[i], key="r_hab")
+            sel_idx = st.radio("エージェントの提案から選ぶ:", range(len(hab_list)), format_func=lambda i: hab_list[i], key="r_hab")
             manual_hab = st.text_input("または、自分で入力する:", key="m_hab")
             
             c1, c2 = st.columns([1, 4])
@@ -335,8 +383,17 @@ with main_col:
                 final_text = manual_hab.strip() if manual_hab.strip() else hab_list[sel_idx]
                 state.text_habit = final_text
                 
-                with st.spinner(f"「{final_text}」に基づく『UX空間』候補を生成中..."):
-                    state.mtplus1["ux_future"] = hp_session.generate_ux_from_habit(final_text)
+                with st.spinner("HPモデル更新中..."):
+                     _ = hp_session.generate_ux_from_habit(final_text)
+
+                st.info("🤖 エージェントが次の「UX空間」について議論中...")
+                with st.spinner("Agents thinking..."):
+                    state.mtplus1["ux_future"] = state.agent_manager.run_multi_agent_generation(
+                        element_type="日常の空間とユーザー体験",
+                        element_desc="その習慣が行われる物理的・デジタルな空間や具体的な体験",
+                        topic=get_topic_str(),
+                        full_context_str=get_context_for_agents()
+                    )
                 
                 state.s2_ux = True
                 st.rerun()
@@ -347,7 +404,7 @@ with main_col:
             st.info(f"前提（慣習化）: {state.text_habit}")
             ux_list = state.mtplus1.get("ux_future", [])
             
-            sel_idx = st.radio("選択肢から選ぶ:", range(len(ux_list)), format_func=lambda i: ux_list[i], key="r_ux")
+            sel_idx = st.radio("エージェントの提案から選ぶ:", range(len(ux_list)), format_func=lambda i: ux_list[i], key="r_ux")
             manual_ux = st.text_input("または、自分で入力する:", key="m_ux")
             
             c1, c2 = st.columns([1, 4])
@@ -367,7 +424,7 @@ with main_col:
                 st.rerun()
 
     # ---------------------------------------------
-    #   🟪 ステップ3：SF物語アウトライン生成
+    #   🟪 ステップ3：SF物語アウトライン生成 (Multi-Agent Story Generator)
     # ---------------------------------------------
     if state.step4 and state.hp_json:
         st.header("ステップ 3：HPモデルの可視化 & 物語生成", divider="grey")
@@ -377,32 +434,29 @@ with main_col:
         
         st.write("---") 
 
-        st.subheader("SF物語ストーリー概要生成")
+        st.subheader("SF物語ストーリー概要生成 (Multi-Agent Edition)")
 
         if state.outline is None:
-            if st.button("✨ ストーリー概要を生成", key="btn_generate_outline", type="primary"):
-                with st.spinner("GPT によるストーリー概要生成中…"):
-                    hp = state.hp_json
-                    state.outline = generate_outline(
-                        ap_model_history=[
-                            {"ap_model": hp.get("hp_mt_0", {})},
-                            {"ap_model": hp.get("hp_mt_1", {})},
-                            {"ap_model": hp.get("hp_mt_2", {})},
-                        ],
-                    )
+            if st.button("✨ Agentチームにストーリー制作を依頼", key="btn_generate_outline", type="primary"):
+                st.info("総監督、設定担当、プロット担当のエージェントたちが協力して物語を構築しています。これには数分かかる場合があります...")
+                with st.spinner("Story Generating (Director -> Setting -> Outline)..."):
+                    # Use the new Multi-Agent Story Generator
+                    state.outline = state.story_generator.generate_story_outline(state.hp_json)
                 st.success("ストーリー概要が生成されました。")
                 st.rerun()
 
         if state.outline:
             st.subheader("現在のストーリー概要：")
-            st.text_area(label="", value=state.outline, height=300, disabled=True)
+            st.text_area(label="", value=state.outline, height=400, disabled=True)
 
             col1, col2 = st.columns(2)
             with col1:
-                mod = st.text_area("修正提案：", height=100, key="outline_modify")
+                # 修改功能暂时保持原有的简单 GPT 逻辑，因为 Multi-Agent 主要用于生成
+                mod = st.text_area("修正提案（簡易GPT編集）:", height=100, key="outline_modify")
                 if st.button("🔁 更新", key="btn_modify"):
                     if mod.strip():
                         with st.spinner("ストーリー概要修正中…"):
+                            # 调用原有的 modify_outline (outline.py)
                             new_outline = modify_outline(state.outline, mod)
                             state.outline = new_outline
                         st.success("ストーリー概要が更新されました。")
@@ -437,39 +491,32 @@ with main_col:
             key="download_outline"
         )
 
-# --- 右栏：聊天界面 (可隐藏/显示) ---
+# --- 右栏：聊天界面 ---
 with chat_col:
-    # ❗ 修正点: 在聊天区域开始前插入垂直空间 (15px)
     st.markdown('<div style="height: 37px;"></div>', unsafe_allow_html=True)
     
-    # 聊天界面容器占位符
     chat_placeholder = st.empty()
 
     if state.show_chat:
         with chat_placeholder.container():
-            # 顶部隐藏按钮
-            # ❗ 修复 Key 冲突，并使用新的 Key
             col_c1, col_c2 = st.columns([3, 1])
             with col_c2:
-                if st.button("❌ 隠す", key="hide_chat_button"): # 使用 unique key
+                if st.button("❌ 隠す", key="hide_chat_button"):
                     state.show_chat = False
                     st.rerun()
 
-            # 渲染聊天界面内容
             render_chat_ui(st.container()) 
         
     else:
-        # 如果是隐藏状态，只显示一个开启按钮
         with chat_placeholder.container():
-            st.write("") # 占位符
+            st.write("") 
             st.write("---")
             if st.button("🤖 AIアシスタントを開く", key="show_chat_btn"):
                 state.show_chat = True
                 st.rerun()
 
-# 最后的 next step 提示 (可选)
 st.markdown("---")
 if not state.show_chat:
     st.write("🤖 ヘルプが必要な場合は、右側の 'AIアシスタントを開く' ボタンをクリックしてチャットパネルを開いてください。")
 else:
-    st.write("💡 チャットパネルは開いています。いつでも質問したり、'❌ 隠す' ボタンをクリックして閉じることができます。")
+    st.write("💡 チャットパネルは開いています。")
