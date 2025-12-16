@@ -92,7 +92,7 @@ st.header("ステップ 1：あなたの経験についての4つの質問", div
 col_q_L, col_q_R = st.columns([1, 1])
 
 with col_q_L:
-    st.subheader("Q1（Mt：日常の空間とユーザー体験）")
+    st.subheader("Q1")
     q1 = st.text_area("どのような時に、どのような場所で何をしているかという体験", key="input_q1", height=80)
     if st.button("Q1 を送信", key="btn_q1"):
         if q1.strip():
@@ -100,7 +100,7 @@ with col_q_L:
             state.show_q2 = True
 
     if state.show_q2:
-        st.subheader("Q2（Mt：製品・サービス）")
+        st.subheader("Q2")
         q2 = st.text_area("重要な製品やサービス", key="input_q2", height=60)
         if st.button("Q2 を送信", key="btn_q2"):
             if q2.strip():
@@ -109,7 +109,7 @@ with col_q_L:
 
 with col_q_R:
     if state.show_q3:
-        st.subheader("Q3（Mt：意味付け）")
+        st.subheader("Q3")
         q3 = st.text_area("何のために使用していますか？", key="input_q3", height=60)
         if st.button("Q3 を送信", key="btn_q3"):
             if q3.strip():
@@ -117,7 +117,7 @@ with col_q_R:
                 state.show_q4 = True
 
     if state.show_q4 and not state.step2:
-        st.subheader("Q4（Mt：人々の価値観）")
+        st.subheader("Q4")
         q4 = st.text_area("どんな自分でありたいですか？", key="input_q4", height=60)
         if st.button("Q4 を送信して Multi-Agent 起動", key="btn_q4", type="primary"):
             if q4.strip():
