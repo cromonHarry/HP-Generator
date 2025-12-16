@@ -28,31 +28,30 @@ class AgentManager:
         return self.agents
 
     def _agent_think(self, agent, element_type, context_str, history):
-        """单个 Agent 生成提案 - 已改良Prompt以去除废话"""
+        """单个 Agent 生成提案 - 50字以内限制"""
         history_text = "\n".join([f"- {h}" for h in history]) if history else "なし"
         
-        # 改良后的 Prompt：增加“禁止事项”和“出力例”
         prompt = f"""
 あなたは{agent['name']}です（専門：{agent['expertise']}）。
-{agent['perspective']}の視点で、未来（Mt+1）の要素「{element_type}」を具体的に予測してください。
+{agent['perspective']}の視点で、未来（Mt+1）の要素「{element_type}」を予測してください。
 
 ## 文脈
 {context_str}
 
-## 過去の提案（重複回避）
+## 過去の提案
 {history_text}
 
 【重要：出力ルール】
-1. **前置きは一切禁止**です。「未来の社会問題としては…」「…と考えられます」などの導入句は書かないでください。
-2. HPモデルの定義説明（「前衛的社会問題とは…」）も不要です。
-3. 予測される**「現象」「状態」「光景」そのもの**を、断定的に、かつ具体的に書き出してください。
-4. 読者がその未来の情景を鮮明にイメージできるようなテキストにしてください。
+1. **50文字以内**で出力してください。これは絶対条件です。
+2. 「未来の社会問題としては…」等の前置きは一切禁止です。体言止めなどで簡潔に。
+3. HPモデルの定義説明は不要です。
+4. 予測される**「現象」「状態」のみ**をズバリ書いてください。
 
 【出力例】
-（悪い例）：未来の前衛的社会問題としては、AIによる支配が考えられます。これは…
-（良い例）：自律型AIが司法判断の9割を代行するようになり、人間の感情が法廷から排除されたことで生じる「計算された非人道的な正義」。
+（悪い）：未来の社会ではAIが発達し、人間が労働から解放されることで、生きがいを喪失する問題。（45文字）
+（良い）：AIによる労働解放が招く「全人類的虚無感」と「生きがい喪失」。（30文字）
 
-あなたの予測内容（テキストのみ、100文字〜150文字程度）を出力してください：
+あなたの予測（テキストのみ、日本語、50文字以内）：
 """
         response = self.client.chat.completions.create(
             model="gpt-4o",
@@ -68,10 +67,10 @@ class AgentManager:
 トピック: {topic}
 要素: {element_type} (未来 Mt+1)
 
-以下の提案を、創造性（最重要）、HPモデルとの整合性、論理的接続性に基づいて評価してください。
+以下の提案を評価してください。
 {proposals_text}
 
-最も優れた提案を1つ選択してください。
+最も創造的かつ簡潔な提案を1つ選択してください。
 以下のJSON形式で出力してください:
 {{ "selected_agent": "エージェント名", "selected_content": "提案内容（そのまま）", "reason": "選定理由（日本語）" }}
 """
@@ -85,18 +84,15 @@ class AgentManager:
 
     def run_multi_agent_generation(self, element_type, element_desc, topic, full_context_str) -> list[str]:
         """
-        运行 3 轮迭代，返回 3 个最佳候选方案列表供用户选择。
+        运行 3 轮迭代
         """
-        # 1. 雇佣专家
         if not self.agents:
             self.generate_agents(topic)
 
         candidates = []
         agent_history = {agent['name']: [] for agent in self.agents}
 
-        # 2. 运行 3 轮迭代 (Iterations)
         for i in range(1, 4):
-            # 并行生成
             proposals = []
             with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
                 future_to_agent = {
@@ -115,10 +111,9 @@ class AgentManager:
             if not proposals:
                 continue
 
-            # 裁判评选本轮最佳
             judgment = self._judge_proposals(proposals, element_type, topic)
             winner_content = judgment.get('selected_content', "")
             if winner_content:
                 candidates.append(winner_content)
 
-        return candidates if candidates else ["生成に失敗しました。再試行してください。"]
+        return candidates if candidates else ["生成失敗"]

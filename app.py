@@ -182,7 +182,7 @@ if state.step2:
             state.s2_value = True
             st.rerun()
 
-    # --- ④ 人々の価値観 ---
+    # --- ③ 人々の価値観 ---
     if state.s2_value and not state.s2_habit:
         st.subheader("③ 人々の価値観")
         val_list = state.mtplus1.get("values", [])
@@ -257,6 +257,16 @@ if state.step4 and state.hp_json:
     
     # 可視化
     render_hp_visualization(state.hp_json)
+
+    # 【新規】 修正ボタン
+    if st.button("⬅️ Step 2 に戻ってHPモデルを修正", type="secondary"):
+        # Step 3 フラグを落とし、HPモデルデータをクリア
+        state.step4 = False
+        state.hp_json = None
+        # Step 2 の最終段階（UX選択）に戻る
+        state.s2_ux = True
+        st.rerun()
+
     st.write("---") 
 
     st.subheader("SF物語ストーリー概要 (Multi-Agent Director Mode)")
@@ -268,7 +278,7 @@ if state.step4 and state.hp_json:
     """)
 
     if state.outline is None:
-        if st.button("✨ エージェントチームに執筆を依頼", key="btn_generate_outline", type="primary"):
+        if st.button("✨ ストーリー概要を生成する", key="btn_generate_outline", type="primary"):
             with st.spinner("監督(Director)と作家(Agent)が協力してストーリーを構築中... (これには時間がかかります)"):
                 # Multi-Agent Story Generation
                 state.outline = state.story_gen.generate_story_outline(state.hp_json)
