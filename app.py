@@ -11,9 +11,83 @@ from chat_ui import render_chat_ui # 聊天界面
 from agent_manager import AgentManager
 from story_generator import StoryGenerator
 
-# ===== 页面设置 =====
-st.set_page_config(page_title="HPモデル SFプロット生成ツール",
-                    page_icon="🛰️", layout="wide") # 使用 wide 布局
+# ===============================
+# 0. セッション状態の初期化 (Page Configの前に判定が必要)
+# ===============================
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+
+# ログイン済みならサイドバーを「隠す(collapsed)」、未ログインなら「表示(expanded)」
+# これにより、ログイン成功してリロードされた瞬間にサイドバーが閉じます
+sb_state = "collapsed" if st.session_state.authenticated else "expanded"
+
+# ===============================
+# 1. ページ設定
+# ===============================
+st.set_page_config(
+    page_title="HPモデル SFプロット生成ツール",
+    page_icon="🛰️", 
+    layout="wide",
+    initial_sidebar_state=sb_state  # 👈 ここで動的に制御
+)
+
+# ===============================
+# 2. 🔐 認証ロジック (极简版：登录后无痕迹)
+# ===============================
+def check_authentication():
+    # --- A. 如果已经登录 ---
+    if st.session_state.authenticated:
+        # 啥也不显示，直接返回
+        # 这样主程序就会接着往下运行，界面上不会有多余的按钮
+        return
+
+    # --- B. 如果未登录 (显示登录框) ---
+    
+    # 登录页样式
+    st.markdown("""
+    <style>
+    .stApp { background-color: #0d0d1e; color: #fff; }
+    div[data-testid="stForm"] { 
+        background: rgba(20, 20, 40, 0.8); 
+        padding: 40px; 
+        border-radius: 15px; 
+        border: 1px solid #6200ea;
+        box-shadow: 0 0 20px rgba(98, 0, 234, 0.3);
+    }
+    h1 { text-align: center; color: #8cfffb; font-family: 'Space Mono', monospace; }
+    </style>
+    """, unsafe_allow_html=True)
+
+    st.markdown("<h1>🛰️ SYSTEM LOGIN</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #a7ffeb;'>HPモデル SFプロット生成ツールへようこそ</p>", unsafe_allow_html=True)
+
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col2:
+        with st.form("login_form"):
+            email = st.text_input("メールアドレス")
+            password = st.text_input("パスワード", type="password")
+            submitted = st.form_submit_button("🚀 ログイン開始", use_container_width=True)
+            
+            if submitted:
+                try:
+                    valid_users = st.secrets["passwords"]
+                    if email in valid_users and valid_users[email] == password:
+                        st.success("認証成功。")
+                        st.session_state.authenticated = True
+                        st.session_state.user_email = email
+                        st.rerun() # 刷新页面，直接进入主程序
+                    else:
+                        st.error("⛔ メールアドレスまたはパスワードが間違っています。")
+                except FileNotFoundError:
+                    st.error("⚠️ エラー: secrets.toml が見つかりません。")
+                except KeyError:
+                    st.error("⚠️ エラー: secrets.toml に [passwords] がありません。")
+    
+    # 未登录时，停止后续代码运行
+    st.stop()
+
+# === 🚀 認証チェック実行 ===
+check_authentication()
 
 # ===============================
 # 🎨 カスタムCSS (宇宙背景とアニメーション)
