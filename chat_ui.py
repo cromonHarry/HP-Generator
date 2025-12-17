@@ -3,7 +3,34 @@ from openai import OpenAI
 import os 
 
 # ==========================================
-# 🎯 专门针对 Q1-Q4 的引导 Prompt 定义
+# 🎯 専門家による初期挨拶 (Phaseごとの最初の問いかけ)
+# ==========================================
+INITIAL_GREETINGS = {
+    "q1": """こんにちは！Step 1のQ1（体験）について一緒に考えましょう。
+
+まず、あなたが「これが好きだ！」「心地よい！」と感じている具体的なシーンを思い浮かべてみてください。
+それは**いつ、どこで、何をしている時**ですか？""",
+
+    "q2": """次はQ2（製品・サービス）ですね。
+    
+先ほど教えてもらった体験をするために、**「これがないと始まらない」という道具やサービス**はありますか？
+（例：特定のアプリ、愛用の道具、場所など）""",
+
+    "q3": """Q3（意味・目的）に進みましょう。
+
+なぜ、その製品やサービスを使うのでしょうか？
+単なる便利さだけでなく、**それを使うことで得られる「心の充足感」**について教えてください。""",
+
+    "q4": """最後はQ4（価値観）です。
+
+そのような体験や行動を大切にしているあなたは、**「どんな自分」**でありたいと願っていますか？
+（例：自由な自分、創造的な自分、つながりを大切にする自分...）""",
+
+    "normal": "こんにちは！何かお手伝いできることはありますか？"
+}
+
+# ==========================================
+# 🎯 専門家によるシステムプロンプト
 # ==========================================
 CONTEXT_PROMPTS = {
     "q1": """
@@ -135,16 +162,20 @@ def render_chat_ui(container, current_phase: str, user_inputs: dict):
         st.header("🤖 AIアシスタント")
 
         # ===================================================
-        # 1. フェーズ変更検知と自動リセット
+        # 1. フェーズ変更検知と自動リセット＆初期挨拶
         # ===================================================
         if "chat_phase" not in st.session_state:
             st.session_state.chat_phase = "init"
             st.session_state.chat_history = []
 
-        # フェーズが変わったら履歴をリセット（自動的に新しい話題へ）
+        # フェーズが変わったら履歴をリセットし、初期挨拶を追加
         if st.session_state.chat_phase != current_phase:
-            st.session_state.chat_history = []
             st.session_state.chat_phase = current_phase
+            st.session_state.chat_history = []
+            
+            # 初期挨拶を取得して追加
+            greeting_msg = INITIAL_GREETINGS.get(current_phase, INITIAL_GREETINGS["normal"])
+            st.session_state.chat_history.append({"role": "assistant", "content": greeting_msg})
             
         # 現在のトピックを控えめに表示
         phase_labels = {
@@ -158,30 +189,27 @@ def render_chat_ui(container, current_phase: str, user_inputs: dict):
 
         
         # ===================================================
-        # 2. チャット履歴 (3番目) - デザインを元に戻す
+        # 2. チャット履歴 (3番目)
         # ===================================================
         # チャットエリアの高さを固定してスクロール可能に
         chat_container = st.container(height=400)
         
         with chat_container:
             for msg in st.session_state.chat_history:
-                # 元の色分けロジック (#DCF8C6 / #F1F0F0)
                 color = "#DCF8C6" if msg["role"] == "user" else "#F1F0F0"
                 float_dir = "right" if msg["role"] == "user" else "left"
                 
-                # Markdownを使用してチャットバブル風に表示
                 st.markdown(f"""
                     <div style='background-color:{color}; padding:10px; border-radius:10px; margin:5px 0; max-width:85%; float:{float_dir}; clear:both; color:black;'>
                         {msg['content']}
                     </div>
                 """, unsafe_allow_html=True)
             
-            # スペーサー（バブルが浮動要素のため）
             st.markdown("<div style='clear: both;'></div>", unsafe_allow_html=True)
 
 
         # ===================================================
-        # 3. ユーザー入力 (フォーム化してエンターキー送信対応)
+        # 3. ユーザー入力
         # ===================================================
         with st.form(key="chat_form", clear_on_submit=True):
             user_input = st.text_input("メッセージを入力", placeholder="例：何を書けばいいかわからない...", key="chat_input_field")
@@ -191,22 +219,24 @@ def render_chat_ui(container, current_phase: str, user_inputs: dict):
                 submit_btn = st.form_submit_button("送信")
             
             if submit_btn and user_input.strip():
-                # 1. ユーザーの新しい発言を履歴に追加
+                # 1. ユーザー発言
                 st.session_state.chat_history.append({"role": "user", "content": user_input})
                 
                 with st.spinner("AIが考えています…"):
-                    # 2. 履歴と「現在の文脈」を渡して応答を取得
+                    # 2. AI応答
                     ai_reply = get_ai_response(st.session_state.chat_history, current_phase, user_inputs)
                         
-                # 3. AIの応答を履歴に追加
+                # 3. AI応答追加
                 st.session_state.chat_history.append({"role": "assistant", "content": ai_reply})
                 
-                # 履歴が更新された後、UIを再描画
                 st.rerun() 
 
         # ===================================================
-        # 4. 清空ボタン (最下部)
+        # 4. 清空ボタン
         # ===================================================
-        if st.button("🔄 会話をリセット", key="btn_clear_bottom", help="会話履歴をリセットします"):
+        if st.button("🔄 会話をリセット", key="btn_clear_bottom", help="会話履歴をリセットして最初からやり直します"):
             st.session_state.chat_history = []
+            # リセット時も初期挨拶は入れる
+            greeting_msg = INITIAL_GREETINGS.get(current_phase, INITIAL_GREETINGS["normal"])
+            st.session_state.chat_history.append({"role": "assistant", "content": greeting_msg})
             st.rerun()
