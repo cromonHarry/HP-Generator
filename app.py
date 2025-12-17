@@ -182,7 +182,7 @@ def render_main_ui():
     st.header("ステップ 1：あなたの経験についての4つの質問", divider="grey")
 
     # Q1
-    st.subheader("Q1（Mt：日常の空間とユーザー体験）")
+    st.subheader("Q1")
     q1 = st.text_area("あなたがすきなことをしている情景を思い出して、どのような時に、どのような場所で何をしているかという体験を書き出してください。", key="input_q1", height=80)
     if st.button("Q1 を送信", key="btn_q1"):
         if not q1.strip():
@@ -193,7 +193,7 @@ def render_main_ui():
             st.success("Q1 を受け取りました。")
 
     if state.show_q2:
-        st.subheader("Q2（Mt：製品・サービス）")
+        st.subheader("Q2")
         q2 = st.text_area("その一連の体験を成立させるために重要な製品やサービスを挙げてください。", key="input_q2", height=68)
         if st.button("Q2 を送信", key="btn_q2"):
             if not q2.strip():
@@ -204,7 +204,7 @@ def render_main_ui():
                 st.success("Q2 を受け取りました。")
 
     if state.show_q3:
-        st.subheader("Q3（Mt：意味付け）")
+        st.subheader("Q3")
         q3 = st.text_area("あなたは、何のためにその製品やサービスを使用していますか？", key="input_q3", height=68)
         if st.button("Q3 を送信", key="btn_q3"):
             if not q3.strip():
@@ -215,7 +215,7 @@ def render_main_ui():
                 st.success("Q3 を受け取りました。")
 
     if state.show_q4 and not state.step2:
-        st.subheader("Q4（Mt：人々の価値観）")
+        st.subheader("Q4")
         q4 = st.text_area("そのような体験を行うあなたはどんな自分でありたいですか？", key="input_q4", height=68)
         if st.button("Q4 を送信して Step2 開始", key="btn_q4", type="primary"):
             if not q4.strip():
