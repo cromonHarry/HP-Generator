@@ -191,6 +191,7 @@ def render_main_ui():
             hp_session.handle_input1(q1)
             state.show_q2 = True
             st.success("Q1 を受け取りました。")
+            st.rerun() # 为了刷新右侧聊天状态
 
     if state.show_q2:
         st.subheader("Q2")
@@ -202,6 +203,7 @@ def render_main_ui():
                 hp_session.handle_input2(q2)
                 state.show_q3 = True
                 st.success("Q2 を受け取りました。")
+                st.rerun() # 为了刷新右侧聊天状态
 
     if state.show_q3:
         st.subheader("Q3")
@@ -213,6 +215,7 @@ def render_main_ui():
                 hp_session.handle_input3(q3)
                 state.show_q4 = True
                 st.success("Q3 を受け取りました。")
+                st.rerun() # 为了刷新右侧聊天状态
 
     if state.show_q4 and not state.step2:
         st.subheader("Q4")
@@ -504,8 +507,20 @@ with chat_col:
                 if st.button("❌ 隠す", key="hide_chat_button"):
                     state.show_chat = False
                     st.rerun()
-
-            render_chat_ui(st.container()) 
+            
+            # --- 自动判定当前阶段 ---
+            current_phase = "normal"
+            if not state.step2:
+                if not state.show_q2:
+                    current_phase = "q1"
+                elif not state.show_q3:
+                    current_phase = "q2"
+                elif not state.show_q4:
+                    current_phase = "q3"
+                else:
+                    current_phase = "q4"
+            
+            render_chat_ui(st.container(), current_phase) 
         
     else:
         with chat_placeholder.container():
