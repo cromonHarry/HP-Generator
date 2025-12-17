@@ -173,7 +173,8 @@ def get_context_for_agents():
 
 def get_topic_str():
     """生成用户输入的简要主题"""
-    return f"現在のUX: {state.user_inputs['q1_ux']} / 価値観: {state.user_inputs['q4_value']}"
+    # 修正: state.hp_session.user_inputs を参照するように変更
+    return f"現在のUX: {state.hp_session.user_inputs['q1_ux']} / 価値観: {state.hp_session.user_inputs['q4_value']}"
 
 # ===============================
 # 封装主界面 (Step 1)
@@ -520,8 +521,8 @@ with chat_col:
                 else:
                     current_phase = "q4"
             
-            # Pass user_inputs to chat UI so AI knows the context
-            render_chat_ui(st.container(), current_phase, state.user_inputs) 
+            # 修正: state.hp_session.user_inputs を渡す
+            render_chat_ui(st.container(), current_phase, state.hp_session.user_inputs) 
         
     else:
         with chat_placeholder.container():
