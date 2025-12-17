@@ -27,8 +27,7 @@ CONTEXT_PROMPTS = {
 ユーザーは「Step 1: Q2（体験を成立させる製品・サービス）」を特定しようとしています。
 
 【あなたの役割】
-ユーザーがQ1で答えた体験（もし分からなければ最初に聞いてください）を実現するために、
-「絶対に欠かせない道具、アプリ、施設、サービス」が何かを特定する手助けをしてください。
+ユーザーがQ1で答えた体験を実現するために、「絶対に欠かせない道具、アプリ、施設、サービス」が何かを特定する手助けをしてください。
 
 【ゴール】
 最終的に、Q2の回答欄に記入するための**「具体的な製品名（架空でも可）」や「サービス名」**を提示してください。
@@ -63,8 +62,7 @@ CONTEXT_PROMPTS = {
 """
 }
 
-# デフォルト（Step 2以降など）
-DEFAULT_SYSTEM_PROMPT = "あなたは親切なアシスタントです。ユーザーは「アーキオロジカル・プロトタイピング（HP）」モデルについて相談します。簡潔な言葉でユーザーにアドバイスしてください。"
+DEFAULT_SYSTEM_PROMPT = "あなたは親切なアシスタントです。ユーザーは「アーキオロジカル・プロトタイピング（HP）」モデルについて相談します。簡潔な言葉でユーザーにアドバイスしてください。すべての質問に日本語で丁寧に答えてください。"
 
 # --- API クライアント初期化 ---
 def get_openai_client():
@@ -82,17 +80,28 @@ def get_openai_client():
         st.stop()
 
 
-def get_ai_response(chat_history: list, mode: str) -> str:
+def get_ai_response(chat_history: list, mode: str, user_context: dict) -> str:
     """
-    現在のモード（q1-q4, normal）に応じたシステムプロンプトを使用して回答を生成する
+    現在のモード（q1-q4, normal）と、ユーザーの既存回答(user_context)を考慮して回答を生成する
     """
     client = get_openai_client()
     
-    # モードに対応するシステムプロンプトを取得
+    # 1. 基本的な指示
     specific_instruction = CONTEXT_PROMPTS.get(mode, DEFAULT_SYSTEM_PROMPT)
     
+    # 2. ユーザーが既に入力した情報の注入（文脈共有）
+    context_str = ""
+    if user_context:
+        context_str = "\n【現在までのユーザー入力情報（参考）】\n"
+        if user_context.get("q1_ux"): context_str += f"- Q1(体験): {user_context['q1_ux']}\n"
+        if user_context.get("q2_product"): context_str += f"- Q2(製品): {user_context['q2_product']}\n"
+        if user_context.get("q3_meaning"): context_str += f"- Q3(意味): {user_context['q3_meaning']}\n"
+        if user_context.get("q4_value"): context_str += f"- Q4(価値観): {user_context['q4_value']}\n"
+
     system_prompt = f"""
 {specific_instruction}
+
+{context_str}
 
 【基本ルール】
 1. **日本語**で、親しみやすく丁寧（です・ます調）に話してください。
@@ -115,113 +124,89 @@ def get_ai_response(chat_history: list, mode: str) -> str:
         return f"AI応答の取得中にエラーが発生しました: {e}"
 
 
-def render_chat_ui(container, current_phase: str):
+def render_chat_ui(container, current_phase: str, user_inputs: dict):
     """
     UIレンダリングメイン関数
     current_phase: 'q1', 'q2', 'q3', 'q4', or 'normal'
+    user_inputs: メイン画面で入力された回答の辞書
     """
     with container:
-        st.header("🤖 執筆アシスタント")
+
+        st.header("🤖 AIアシスタント")
 
         # ===================================================
-        # 1. フェーズ変更検知とリセット
+        # 1. フェーズ変更検知と自動リセット
         # ===================================================
         if "chat_phase" not in st.session_state:
             st.session_state.chat_phase = "init"
             st.session_state.chat_history = []
 
-        # 前回のフェーズと異なる場合、履歴をリセット
+        # フェーズが変わったら履歴をリセット（自動的に新しい話題へ）
         if st.session_state.chat_phase != current_phase:
             st.session_state.chat_history = []
             st.session_state.chat_phase = current_phase
-            # リセット直後はrerunして画面をクリアした状態で表示したいが、
-            # 無限ループを防ぐため、ここでは履歴クリアのみ行い、UI描画に進む
-
-        # フェーズごとの表示タイトル
-        phase_titles = {
-            "q1": "Q1: 体験 (Experience) の作成中",
-            "q2": "Q2: 製品・サービス (Product) の特定中",
-            "q3": "Q3: 目的・意味 (Meaning) の深掘り中",
-            "q4": "Q4: 理想の自分 (Values) の言語化中",
-            "normal": "フリーチャットモード"
+            
+        # 現在のトピックを控えめに表示
+        phase_labels = {
+            "q1": "Q1について相談中...",
+            "q2": "Q2について相談中...",
+            "q3": "Q3について相談中...",
+            "q4": "Q4について相談中...",
+            "normal": "フリーチャット"
         }
-        title_text = phase_titles.get(current_phase, "フリーチャットモード")
-        
-        st.info(f"💡 **{title_text}**")
-        st.markdown("<small>※質問が進むと、自動的に会話がリセットされ次の話題に移ります。</small>", unsafe_allow_html=True)
+        st.caption(f"Topic: {phase_labels.get(current_phase, 'General')}")
+
         
         # ===================================================
-        # 2. チャット履歴の表示
+        # 2. チャット履歴 (3番目) - デザインを元に戻す
         # ===================================================
-        
-        # スクロール可能なコンテナ（高さ固定）
+        # チャットエリアの高さを固定してスクロール可能に
         chat_container = st.container(height=400)
         
         with chat_container:
-            # 初回メッセージ（履歴が空の場合）
-            if not st.session_state.chat_history:
-                welcome_msg = ""
-                if current_phase in CONTEXT_PROMPTS:
-                    welcome_msg = f"""
-                    こんにちは！<br>
-                    <b>{title_text}</b> ですね。<br>
-                    何を書けばいいか迷ったら、私がインタビューして答えを一緒に作ります。<br>
-                    「よろしく」や「手伝って」と話しかけてください！
-                    """
-                else:
-                    welcome_msg = "こんにちは！何かお手伝いできることはありますか？"
-
-                st.markdown(f"""
-                <div style='background-color: #f0f2f6; padding: 10px; border-radius: 10px; margin-bottom: 10px; color: #333;'>
-                    {welcome_msg}
-                </div>
-                """, unsafe_allow_html=True)
-
             for msg in st.session_state.chat_history:
-                # ユーザーとAIで色と配置を変える
-                if msg["role"] == "user":
-                    bg_color = "#e8f0fe" # 薄い青
-                    align = "right"
-                    text_color = "#333"
-                else:
-                    bg_color = "#f0f2f6" # 薄いグレー
-                    align = "left"
-                    text_color = "#333"
+                # 元の色分けロジック (#DCF8C6 / #F1F0F0)
+                color = "#DCF8C6" if msg["role"] == "user" else "#F1F0F0"
+                float_dir = "right" if msg["role"] == "user" else "left"
                 
+                # Markdownを使用してチャットバブル風に表示
                 st.markdown(f"""
-                    <div style='text-align: {align}; margin-bottom: 5px;'>
-                        <div style='display: inline-block; background-color: {bg_color}; padding: 8px 12px; border-radius: 15px; text-align: left; max-width: 85%; color: {text_color}; box-shadow: 0 1px 2px rgba(0,0,0,0.1);'>
-                            {msg['content']}
-                        </div>
+                    <div style='background-color:{color}; padding:10px; border-radius:10px; margin:5px 0; max-width:85%; float:{float_dir}; clear:both; color:black;'>
+                        {msg['content']}
                     </div>
                 """, unsafe_allow_html=True)
+            
+            # スペーサー（バブルが浮動要素のため）
+            st.markdown("<div style='clear: both;'></div>", unsafe_allow_html=True)
+
 
         # ===================================================
-        # 3. 入力フォーム
+        # 3. ユーザー入力 (フォーム化してエンターキー送信対応)
         # ===================================================
         with st.form(key="chat_form", clear_on_submit=True):
-            user_input = st.text_input("メッセージを入力:", placeholder="例：うまく書けないので手伝って...", key="user_input_field")
+            user_input = st.text_input("メッセージを入力", placeholder="例：何を書けばいいかわからない...", key="chat_input_field")
             
-            col1, col2 = st.columns([1, 4])
-            with col1:
-                submit_btn = st.form_submit_button("送信", type="primary")
+            col_btn1, col_btn2 = st.columns([1, 4])
+            with col_btn1:
+                submit_btn = st.form_submit_button("送信")
             
-            if submit_btn and user_input:
-                # ユーザーの入力を履歴に追加
+            if submit_btn and user_input.strip():
+                # 1. ユーザーの新しい発言を履歴に追加
                 st.session_state.chat_history.append({"role": "user", "content": user_input})
                 
-                # AIの応答を取得（スピナー表示）
-                with st.spinner("AIが考えています..."):
-                    ai_reply = get_ai_response(st.session_state.chat_history, current_phase)
-                
-                # AIの応答を履歴に追加
+                with st.spinner("AIが考えています…"):
+                    # 2. 履歴と「現在の文脈」を渡して応答を取得
+                    ai_reply = get_ai_response(st.session_state.chat_history, current_phase, user_inputs)
+                        
+                # 3. AIの応答を履歴に追加
                 st.session_state.chat_history.append({"role": "assistant", "content": ai_reply})
                 
-                st.rerun()
+                # 履歴が更新された後、UIを再描画
+                st.rerun() 
 
         # ===================================================
-        # 4. 手動リセットボタン
+        # 4. 清空ボタン (最下部)
         # ===================================================
-        if st.button("🗑️ この話題をリセット", key="clear_chat_manual"):
+        if st.button("🔄 会話をリセット", key="btn_clear_bottom", help="会話履歴をリセットします"):
             st.session_state.chat_history = []
             st.rerun()

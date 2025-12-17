@@ -520,7 +520,8 @@ with chat_col:
                 else:
                     current_phase = "q4"
             
-            render_chat_ui(st.container(), current_phase) 
+            # Pass user_inputs to chat UI so AI knows the context
+            render_chat_ui(st.container(), current_phase, state.user_inputs) 
         
     else:
         with chat_placeholder.container():
